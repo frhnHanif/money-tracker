@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="100" fill="#16a34a"/>
+  <g transform="translate(256,256)">
+    <!-- Wallet/Bill -->
+    <rect x="-120" y="-80" width="240" height="160" rx="20" fill="white" stroke="white" stroke-width="4"/>
+    <line x1="-120" y1="-30" x2="120" y2="-30" stroke="#16a34a" stroke-width="4"/>
+    <line x1="-120" y1="20" x2="120" y2="20" stroke="#16a34a" stroke-width="4"/>
+    <line x1="-120" y1="70" x2="80" y2="70" stroke="#16a34a" stroke-width="4"/>
+    <!-- Circle coin -->
+    <circle cx="140" cy="70" r="30" fill="#fbbf24" stroke="white" stroke-width="4"/>
+    <text x="140" y="80" text-anchor="middle" font-size="24" font-weight="bold" fill="#92400e">Rp</text>
+    <!-- Plus sign -->
+    <circle cx="140" cy="-30" r="30" fill="white" stroke="#16a34a" stroke-width="4"/>
+    <line x1="125" y1="-30" x2="155" y2="-30" stroke="#16a34a" stroke-width="6" stroke-linecap="round"/>
+    <line x1="140" y1="-45" x2="140" y2="-15" stroke="#16a34a" stroke-width="6" stroke-linecap="round"/>
+  </g>
+</svg>
