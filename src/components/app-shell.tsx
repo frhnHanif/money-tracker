@@ -4,9 +4,10 @@ import { useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BottomNav } from "@/components/bottom-nav";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
+import { NotificationBell } from "@/components/notification-bell";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Bell } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -20,6 +21,7 @@ const pageTitles: Record<string, string> = {
   "/transactions": "Transaksi",
   "/statistics": "Statistik",
   "/piutang": "Piutang",
+  "/subscriptions": "Langganan",
   "/settings": "Pengaturan",
   "/settings/accounts": "Akun & Rekening",
   "/settings/categories": "Kategori",
@@ -44,28 +46,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const isHome = pathname === "/";
   const title = pageTitles[pathname] || "";
-  const [reminderActive, setReminderActive] = useState(false);
-
-  // Check reminder status
-  useEffect(() => {
-    const checkReminder = () => {
-      const stored = localStorage.getItem("reminderEnabled");
-      if (stored !== "true") {
-        setReminderActive(false);
-        return;
-      }
-      const now = new Date();
-      const reminderTime = localStorage.getItem("reminderTime") || "20:00";
-      const [h, m] = reminderTime.split(":").map(Number);
-      // Show indicator 30 min before and 30 min after reminder time
-      const reminderMin = h * 60 + m;
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      setReminderActive(Math.abs(nowMin - reminderMin) <= 30);
-    };
-    checkReminder();
-    const interval = setInterval(checkReminder, 60000);
-    return () => clearInterval(interval);
-  }, []);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts", refreshKey],
@@ -122,12 +102,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </p>
                 </div>
               </div>
-              <button className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#7a7a7a] ring-1 ring-[#e0e0e0] dark:bg-[#2a2a2c] dark:text-[#cccccc] dark:ring-white/10">
-                <Bell className="h-4 w-4" />
-                {reminderActive && (
-                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-                )}
-              </button>
+              <NotificationBell />
             </div>
           ) : (
             /* Other pages: Back arrow + title + bell */
@@ -141,12 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-semibold text-[#1d1d1f] dark:text-white">
                 {title}
               </h1>
-              <button className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#7a7a7a] ring-1 ring-[#e0e0e0] dark:bg-[#2a2a2c] dark:text-[#cccccc] dark:ring-white/10">
-                <Bell className="h-4 w-4" />
-                {reminderActive && (
-                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-                )}
-              </button>
+              <NotificationBell />
             </div>
           )}
         </div>

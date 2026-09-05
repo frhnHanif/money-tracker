@@ -246,7 +246,7 @@ export default function PiutangPage() {
                             )}
                           </div>
                           <p className="mt-0.5 text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-                            {format(d.createdAt, "dd MMM yyyy")} •{" "}
+                            {format(d.createdAt ? new Date(d.createdAt) : new Date(), "dd MMM yyyy")} •{" "}
                             {formatCurrency(d.amount)}
                           </p>
                         </div>

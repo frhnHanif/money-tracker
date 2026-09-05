@@ -9,7 +9,7 @@ export interface DueItem {
   settledSum: number;
   status: "open" | "settled";
   transactionId: number | null;
-  createdAt: string;
+  createdAt?: string | Date;
 }
 
 export const dueRemaining = (d: DueItem) =>

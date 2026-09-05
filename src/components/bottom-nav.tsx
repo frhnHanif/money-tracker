@@ -3,11 +3,12 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Home, List, BarChart3, Settings, Plus } from "lucide-react";
+import { Home, List, BarChart3, Settings, Plus, Repeat } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/transactions", label: "Transaksi", icon: List },
+  { href: "/subscriptions", label: "Langganan", icon: Repeat },
   { href: "/statistics", label: "Statistik", icon: BarChart3 },
   { href: "/settings", label: "Pengaturan", icon: Settings },
 ];

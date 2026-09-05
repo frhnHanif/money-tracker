@@ -115,9 +115,33 @@ export const settlements = pgTable("settlements", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const subscriptionIntervalEnum = pgEnum("subscription_interval", [
+  "monthly",
+  "yearly",
+]);
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",
+  "inactive",
+]);
+
+export const subscriptions = pgTable("subscriptions", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  name: varchar("name", { length: 100 }).notNull(),
+  price: integer("price").notNull(),
+  interval: subscriptionIntervalEnum("interval").notNull().default("monthly"),
+  billingDay: integer("billing_day").notNull().default(1),
+  status: subscriptionStatusEnum("status").notNull().default("active"),
+  lastPaidAt: date("last_paid_at"),
+  notes: text("notes").default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export type Account = InferSelectModel<typeof accounts>;
 export type Category = InferSelectModel<typeof categories>;
 export type Transaction = InferSelectModel<typeof transactions>;
 export type Budget = InferSelectModel<typeof budgets>;
 export type Due = InferSelectModel<typeof dues>;
 export type Settlement = InferSelectModel<typeof settlements>;
+export type Subscription = InferSelectModel<typeof subscriptions>;

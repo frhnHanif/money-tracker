@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { accounts, categories, transactions, budgets, dues, settlements } from "../db/schema";
+import { accounts, categories, transactions, budgets, dues, settlements, subscriptions } from "../db/schema";
 import { eq, and, gte, lte, sql, desc, asc, or } from "drizzle-orm";
 
 // Accounts
@@ -95,6 +95,36 @@ export async function getSettlementsByDue(dueId: number) {
     .leftJoin(transactions, eq(settlements.transactionId, transactions.id))
     .where(eq(settlements.dueId, dueId))
     .orderBy(desc(settlements.createdAt));
+}
+
+// Subscriptions
+export async function getSubscriptions() {
+  return db.select().from(subscriptions).orderBy(asc(subscriptions.name));
+}
+
+export async function getSubscriptionById(id: number) {
+  const result = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.id, id))
+    .limit(1);
+  return result[0] || null;
+}
+
+// Last activity helpers (for notifications)
+export async function getLastTransactionDate(): Promise<string | null> {
+  const result = await db
+    .select({ last: sql<string>`MAX(${transactions.date})` })
+    .from(transactions);
+  return (result[0]?.last as string) || null;
+}
+
+export async function countTransactionsOnDate(date: string): Promise<number> {
+  const result = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(transactions)
+    .where(eq(transactions.date, date));
+  return Number(result[0]?.count) || 0;
 }
 
 // Transactions

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -63,12 +63,24 @@ export function AddTransactionSheet({
   categories,
   onSuccess,
 }: AddTransactionSheetProps) {
+  const queryClient = useQueryClient();
   const [transactionType, setTransactionType] = useState("expense");
   const [loading, setLoading] = useState(false);
   const [displayAmount, setDisplayAmount] = useState("");
   const [dueMode, setDueMode] = useState<DueMode>("none");
   const [duePerson, setDuePerson] = useState("");
   const [dueId, setDueId] = useState("");
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    queryClient.invalidateQueries({ queryKey: ["summary"] });
+    queryClient.invalidateQueries({ queryKey: ["balances"] });
+    queryClient.invalidateQueries({ queryKey: ["breakdown"] });
+    queryClient.invalidateQueries({ queryKey: ["trend"] });
+    queryClient.invalidateQueries({ queryKey: ["dues"] });
+    queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["budgets"] });
+  };
 
   const { data: openDues = [] } = useQuery<DueItem[]>({
     queryKey: ["dues", "open"],
@@ -173,6 +185,7 @@ export function AddTransactionSheet({
         const result = await res.json();
         const txId = result?.id ?? result?.out?.id;
         if (txId) await runDueAction(txId, data);
+        invalidateAll();
         reset();
         setDisplayAmount("");
         setTransactionType("expense");

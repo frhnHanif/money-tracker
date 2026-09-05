@@ -14,8 +14,15 @@ import {
   ArrowRightLeft,
   HandCoins,
   ChevronRight,
+  Repeat,
 } from "lucide-react";
 import Link from "next/link";
+import {
+  isPaidThisCycle,
+  daysUntil,
+  monthlyPrice,
+  type SubscriptionLike,
+} from "@/lib/subscriptions";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -103,6 +110,21 @@ export default function HomePage() {
     queryKey: ["dues"],
     queryFn: () => fetch("/api/dues").then((r) => r.json()),
   });
+
+  const { data: subs = [] } = useQuery<SubscriptionLike[]>({
+    queryKey: ["subscriptions"],
+    queryFn: () => fetch("/api/subscriptions").then((r) => r.json()),
+  });
+
+  const activeSubs = subs.filter((s) => s.status === "active");
+  const subsMonthly = Math.round(
+    activeSubs.reduce((s, x) => s + monthlyPrice(x), 0)
+  );
+  const subsDueCount = activeSubs.filter((s) => {
+    if (isPaidThisCycle(s)) return false;
+    const d = daysUntil(s);
+    return d >= 0 && d <= 7;
+  }).length;
 
   const openDues = dues.filter((d) => dueRemaining(d) > 0);
   const receivableSum = openDues
@@ -196,6 +218,27 @@ export default function HomePage() {
                 </p>
                 <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
                   {openDues.length} tagihan terbuka • ketuk untuk kelola
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-[#7a7a7a] dark:text-[#cccccc]" />
+            </div>
+          </Link>
+        )}
+
+        {/* Subscriptions */}
+        {activeSubs.length > 0 && (
+          <Link href="/subscriptions" className="block">
+            <div className="flex items-center gap-4 rounded-lg bg-[#8b5cf6]/8 px-5 py-4 dark:bg-[#a78bfa]/10">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#8b5cf6]/15 dark:bg-[#a78bfa]/20">
+                <Repeat className="h-5 w-5 text-[#8b5cf6] dark:text-[#a78bfa]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[#1d1d1f] dark:text-white">
+                  Langganan {formatCurrency(subsMonthly)}/bln
+                </p>
+                <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+                  {activeSubs.length} aktif
+                  {subsDueCount > 0 && ` • ${subsDueCount} jatuh tempo minggu ini`}
                 </p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-[#7a7a7a] dark:text-[#cccccc]" />
