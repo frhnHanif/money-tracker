@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
 import { getAccounts } from "@/lib/db/queries";
-import { eq } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { and, eq } from "drizzle-orm";
+import { getUserId } from "@/lib/session";
 
 export async function PATCH(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, direction } = await req.json();
 
@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const all = await getAccounts();
+  const all = await getAccounts(userId);
   const currentIndex = all.findIndex((a) => a.id === id);
 
   if (currentIndex === -1) {
@@ -31,16 +31,16 @@ export async function PATCH(req: NextRequest) {
   const current = all[currentIndex];
   const target = all[targetIndex];
 
-  // Swap sortOrder
+  // Swap sortOrder (scoped to user)
   await db
     .update(accounts)
     .set({ sortOrder: target.sortOrder })
-    .where(eq(accounts.id, current.id));
+    .where(and(eq(accounts.id, current.id), eq(accounts.userId, userId)));
 
   await db
     .update(accounts)
     .set({ sortOrder: current.sortOrder })
-    .where(eq(accounts.id, target.id));
+    .where(and(eq(accounts.id, target.id), eq(accounts.userId, userId)));
 
   return NextResponse.json({ success: true });
 }

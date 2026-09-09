@@ -110,7 +110,9 @@ export default function AccountsPage() {
         </div>
 
         <div className="divide-y divide-[#f0f0f0] overflow-hidden rounded-lg bg-white ring-1 ring-[#f0f0f0] dark:divide-white/10 dark:bg-[#272729] dark:ring-white/10">
-          {accounts.map((account, idx) => (
+          {accounts.map((account, idx) => {
+            const bal = balances[account.id]?.balance ?? 0;
+            return (
             <div
               key={account.id}
               className="flex items-center justify-between gap-2 px-4 py-3"
@@ -124,9 +126,9 @@ export default function AccountsPage() {
                   <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
                     {account.name}
                   </p>
-                  <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-                    {typeLabel(account.type)} •{" "}
-                    {formatCurrency(balances[account.id]?.balance ?? 0)}
+                  <p className={`text-xs ${bal < 0 ? "text-red-500 dark:text-red-400" : "text-[#7a7a7a] dark:text-[#cccccc]"}`}>
+                    {typeLabel(account.type)} • {formatCurrency(bal)}
+                    {bal < 0 ? " — saldo minus, cek input" : ""}
                   </p>
                 </div>
               </div>
@@ -168,7 +170,8 @@ export default function AccountsPage() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
           {accounts.length === 0 && (
             <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
               <Wallet className="h-6 w-6 text-[#7a7a7a] dark:text-[#cccccc]" />

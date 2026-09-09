@@ -2,23 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { dues } from "@/lib/db/schema";
 import { getDues } from "@/lib/db/queries";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const searchParams = req.nextUrl.searchParams;
   const direction = searchParams.get("direction") as "receivable" | "payable" | null;
   const status = searchParams.get("status") as "open" | "settled" | null;
 
-  const data = await getDues(direction || undefined, status || undefined);
+  const data = await getDues(userId, direction || undefined, status || undefined);
   return NextResponse.json(data);
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const { direction, person, title, amount, transactionId } = body;
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
   const [created] = await db
     .insert(dues)
     .values({
+      userId,
       direction,
       person: String(person).trim(),
       title: title ? String(title).trim() : "",

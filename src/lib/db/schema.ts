@@ -9,6 +9,8 @@ import {
   date,
   text,
   pgEnum,
+  index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const accountTypeEnum = pgEnum("account_type", [
@@ -32,8 +34,22 @@ export const categoryTypeEnum = pgEnum("category_type", [
   "both",
 ]);
 
-export const accounts = pgTable("accounts", {
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  passwordHash: text("password_hash").notNull(),
+  image: text("image"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const accounts = pgTable(
+  "accounts",
+  {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
   name: varchar("name", { length: 100 }).notNull(),
   type: accountTypeEnum("type").notNull().default("bank"),
   icon: varchar("icon", { length: 50 }).default("wallet"),
@@ -42,10 +58,17 @@ export const accounts = pgTable("accounts", {
   isArchived: boolean("is_archived").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  },
+  (table) => [index("accounts_user_id_idx").on(table.userId)]
+);
 
-export const categories = pgTable("categories", {
+export const categories = pgTable(
+  "categories",
+  {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
   name: varchar("name", { length: 100 }).notNull(),
   type: categoryTypeEnum("type").notNull().default("expense"),
   icon: varchar("icon", { length: 50 }).default("tag"),
@@ -53,10 +76,17 @@ export const categories = pgTable("categories", {
   isArchived: boolean("is_archived").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  },
+  (table) => [index("categories_user_id_idx").on(table.userId)]
+);
 
-export const transactions = pgTable("transactions", {
+export const transactions = pgTable(
+  "transactions",
+  {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
   type: transactionTypeEnum("type").notNull(),
   amount: integer("amount").notNull(),
   date: date("date").notNull(),
@@ -70,18 +100,29 @@ export const transactions = pgTable("transactions", {
   source: varchar("source", { length: 50 }).default("manual"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+  },
+  (table) => [index("transactions_user_id_idx").on(table.userId)]
+);
 
-export const budgets = pgTable("budgets", {
+export const budgets = pgTable(
+  "budgets",
+  {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
   categoryId: integer("category_id")
     .references(() => categories.id)
-    .notNull()
-    .unique(),
+    .notNull(),
   amount: integer("amount").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+  },
+  (table) => [
+    index("budgets_user_id_idx").on(table.userId),
+    uniqueIndex("budgets_user_category_unique").on(table.userId, table.categoryId),
+  ]
+);
 
 export const dueDirectionEnum = pgEnum("due_direction", [
   "receivable",
@@ -90,8 +131,13 @@ export const dueDirectionEnum = pgEnum("due_direction", [
 
 export const dueStatusEnum = pgEnum("due_status", ["open", "settled"]);
 
-export const dues = pgTable("dues", {
+export const dues = pgTable(
+  "dues",
+  {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
   direction: dueDirectionEnum("direction").notNull(),
   person: varchar("person", { length: 100 }).notNull(),
   title: varchar("title", { length: 255 }).notNull().default(""),
@@ -101,7 +147,9 @@ export const dues = pgTable("dues", {
   status: dueStatusEnum("status").notNull().default("open"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+  },
+  (table) => [index("dues_user_id_idx").on(table.userId)]
+);
 
 export const settlements = pgTable("settlements", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -125,8 +173,13 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "inactive",
 ]);
 
-export const subscriptions = pgTable("subscriptions", {
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
   name: varchar("name", { length: 100 }).notNull(),
   price: integer("price").notNull(),
   interval: subscriptionIntervalEnum("interval").notNull().default("monthly"),
@@ -136,8 +189,11 @@ export const subscriptions = pgTable("subscriptions", {
   notes: text("notes").default(""),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+  },
+  (table) => [index("subscriptions_user_id_idx").on(table.userId)]
+);
 
+export type User = InferSelectModel<typeof users>;
 export type Account = InferSelectModel<typeof accounts>;
 export type Category = InferSelectModel<typeof categories>;
 export type Transaction = InferSelectModel<typeof transactions>;

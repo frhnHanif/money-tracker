@@ -2,20 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { budgets } from "@/lib/db/schema";
 import { getBudgets } from "@/lib/db/queries";
-import { eq } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { and, eq } from "drizzle-orm";
+import { getUserId } from "@/lib/session";
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const data = await getBudgets();
+  const data = await getBudgets(userId);
   return NextResponse.json(data);
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const { categoryId, amount } = body;
@@ -27,21 +27,21 @@ export async function POST(req: NextRequest) {
   const existing = await db
     .select()
     .from(budgets)
-    .where(eq(budgets.categoryId, parseInt(categoryId)))
+    .where(and(eq(budgets.categoryId, parseInt(categoryId)), eq(budgets.userId, userId)))
     .limit(1);
 
   if (existing[0]) {
     const [updated] = await db
       .update(budgets)
       .set({ amount, updatedAt: new Date() })
-      .where(eq(budgets.id, existing[0].id))
+      .where(and(eq(budgets.id, existing[0].id), eq(budgets.userId, userId)))
       .returning();
     return NextResponse.json(updated);
   }
 
   const [created] = await db
     .insert(budgets)
-    .values({ categoryId: parseInt(categoryId), amount })
+    .values({ userId, categoryId: parseInt(categoryId), amount })
     .returning();
   return NextResponse.json(created);
 }

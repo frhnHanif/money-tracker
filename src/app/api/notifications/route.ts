@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { format } from "date-fns";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/session";
 import {
   getSubscriptions,
   getBudgets,
@@ -28,8 +28,8 @@ function daysAgoText(days: number): string {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const items: NotificationItem[] = [];
   const now = new Date();
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   const year = now.getFullYear();
 
   // 1) Subscriptions overdue / due soon
-  const subs = await getSubscriptions();
+  const subs = await getSubscriptions(userId);
   for (const sub of subs) {
     if (sub.status !== "active") continue;
     if (isPaidThisCycle(sub)) continue;
@@ -63,9 +63,9 @@ export async function GET(req: NextRequest) {
 
   // 2) Budgets over / >= 80%
   const [budgets, breakdown, summary] = await Promise.all([
-    getBudgets(),
-    getCategoryBreakdown(month, year, "expense"),
-    getMonthlySummary(month, year),
+    getBudgets(userId),
+    getCategoryBreakdown(userId, month, year, "expense"),
+    getMonthlySummary(userId, month, year),
   ]);
   const spentByCategory = new Map(
     breakdown.map((b) => [b.categoryId, b.total])
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
   }
 
   // 3) No transactions for 2+ days
-  const lastTx = await getLastTransactionDate();
+  const lastTx = await getLastTransactionDate(userId);
   if (lastTx) {
     const last = new Date(lastTx);
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
   }
 
   // 4) Open receivables
-  const dues = await getDues();
+  const dues = await getDues(userId);
   const openReceivables = dues.filter(
     (d) => d.direction === "receivable" && dueRemaining(d) > 0
   );
@@ -146,7 +146,7 @@ export async function GET(req: NextRequest) {
     const todayStr = `${year}-${String(month).padStart(2, "0")}-${String(
       now.getDate()
     ).padStart(2, "0")}`;
-    const todayCount = await countTransactionsOnDate(todayStr);
+    const todayCount = await countTransactionsOnDate(userId, todayStr);
     if (todayCount === 0) {
       items.push({
         id: "recap-today",

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/session";
 import {
   getAccounts,
   getAccountBalance,
@@ -7,10 +7,10 @@ import {
 } from "@/lib/db/queries";
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const allAccounts = await getAccounts();
+  const allAccounts = await getAccounts(userId);
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -22,8 +22,8 @@ export async function GET() {
 
   for (const acc of allAccounts) {
     balances[acc.id] = {
-      balance: await getAccountBalance(acc.id),
-      monthNet: await getAccountMonthNet(acc.id, month, year),
+      balance: await getAccountBalance(userId, acc.id),
+      monthNet: await getAccountMonthNet(userId, acc.id, month, year),
     };
   }
 

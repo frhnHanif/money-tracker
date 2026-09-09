@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
+import Image from "next/image";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Input } from "@/components/ui/input";
@@ -141,10 +142,52 @@ function ReminderRow() {
   );
 }
 
+function ProfileRow() {
+  const { data: session } = useSession();
+  const name = session?.user?.name || "User";
+  const image = session?.user?.image || null;
+
+  return (
+    <Link
+      href="/settings/profile"
+      className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[#f5f5f7] dark:hover:bg-[#2a2a2c]"
+    >
+      <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-[#0066cc]/10 dark:bg-[#2997ff]/15">
+        {image ? (
+          <Image
+            src={image}
+            alt={name}
+            fill
+            sizes="40px"
+            className="object-cover"
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-sm font-semibold text-[#0066cc] dark:text-[#2997ff]">
+            {name.charAt(0)?.toUpperCase() || "U"}
+          </span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
+          {name}
+        </p>
+        <p className="truncate text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+          {session?.user?.email || ""}
+        </p>
+      </div>
+      <ChevronRight className="h-4 w-4 shrink-0 text-[#7a7a7a] dark:text-[#cccccc]" />
+    </Link>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <AppShell>
       <div className="space-y-6 pb-4">
+        <Section label="Profil">
+          <ProfileRow />
+        </Section>
+
         <Section label="Keuangan">
           <Row icon={Wallet} color="#0066cc" title="Akun & Rekening" href="/settings/accounts" />
           <Row icon={Tag} color="#8b5cf6" title="Kategori" href="/settings/categories" />

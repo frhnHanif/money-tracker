@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { transactions, accounts, categories } from "@/lib/db/schema";
-import { getTransactions } from "@/lib/db/queries";
-import { eq, desc, sql } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { eq, desc } from "drizzle-orm";
+import { getUserId } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const searchParams = req.nextUrl.searchParams;
   const month = searchParams.get("month");
@@ -40,9 +39,7 @@ export async function GET(req: NextRequest) {
     .from(transactions)
     .leftJoin(accounts, eq(transactions.accountId, accounts.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(
-      sql`${transactions.id} IS NOT NULL`
-    )
+    .where(eq(transactions.userId, userId))
     .orderBy(desc(transactions.date), desc(transactions.createdAt));
 
   // Filter in JS since we need dynamic conditions
@@ -83,8 +80,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const { type, amount, accountId, toAccountId, categoryId, description, notes, date } = body;
@@ -96,6 +93,7 @@ export async function POST(req: NextRequest) {
     const [outTx] = await db
       .insert(transactions)
       .values({
+        userId,
         type: "transfer_out",
         amount,
         date: date || new Date().toISOString().split("T")[0],
@@ -109,6 +107,7 @@ export async function POST(req: NextRequest) {
     const [inTx] = await db
       .insert(transactions)
       .values({
+        userId,
         type: "transfer_in",
         amount,
         date: date || new Date().toISOString().split("T")[0],
@@ -125,6 +124,7 @@ export async function POST(req: NextRequest) {
   const [result] = await db
     .insert(transactions)
     .values({
+      userId,
       type: type || "expense",
       amount: parseInt(amount),
       date: date || new Date().toISOString().split("T")[0],

@@ -7,6 +7,7 @@ import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import { NotificationBell } from "@/components/notification-bell";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import Image from "next/image";
 import { ArrowLeft } from "lucide-react";
 
 function getGreeting(): string {
@@ -23,6 +24,7 @@ const pageTitles: Record<string, string> = {
   "/piutang": "Piutang",
   "/subscriptions": "Langganan",
   "/settings": "Pengaturan",
+  "/settings/profile": "Profil",
   "/settings/accounts": "Akun & Rekening",
   "/settings/categories": "Kategori",
   "/settings/budgets": "Budget Bulanan",
@@ -90,9 +92,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             /* Home: Avatar + greeting + bell — thicker */
             <div className="flex items-center justify-between py-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0066cc]/10 text-xl font-semibold text-[#0066cc] dark:bg-[#2997ff]/15 dark:text-[#2997ff]">
-                  {session?.user?.name?.charAt(0)?.toUpperCase() || "U"}
-                </div>
+                {session?.user?.image ? (
+                  <div className="relative h-14 w-14 overflow-hidden rounded-full">
+                    <Image
+                      src={session.user.image}
+                      alt={session.user.name || "Avatar"}
+                      fill
+                      sizes="56px"
+                      className="object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0066cc]/10 text-xl font-semibold text-[#0066cc] dark:bg-[#2997ff]/15 dark:text-[#2997ff]">
+                    {session?.user?.name?.charAt(0)?.toUpperCase() || "U"}
+                  </div>
+                )}
                 <div>
                   <p className="text-lg font-semibold text-[#1d1d1f] dark:text-white">
                     {getGreeting()}

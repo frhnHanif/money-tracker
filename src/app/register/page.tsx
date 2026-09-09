@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/card";
 import { Wallet } from "lucide-react";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -28,6 +29,20 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Gagal mendaftar");
+      setLoading(false);
+      return;
+    }
+
+    // Auto sign-in after successful registration
     const result = await signIn("credentials", {
       email,
       password,
@@ -35,8 +50,7 @@ export default function LoginPage() {
     });
 
     if (result?.error) {
-      setError("Email atau password salah");
-      setLoading(false);
+      router.push("/login");
     } else {
       router.push("/");
       router.refresh();
@@ -51,14 +65,25 @@ export default function LoginPage() {
             <Wallet className="h-8 w-8 text-[#0066cc] dark:text-[#2997ff]" />
           </div>
           <CardTitle className="text-2xl text-[#1d1d1f] dark:text-white">
-            Money Tracker
+            Buat Akun
           </CardTitle>
           <CardDescription className="text-[#7a7a7a] dark:text-[#cccccc]">
-            Masuk untuk mengelola keuanganmu
+            Mulai kelola keuanganmu
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nama</Label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nama kamu"
+                required
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -77,7 +102,7 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder="Minimal 8 karakter"
                 required
               />
             </div>
@@ -85,16 +110,16 @@ export default function LoginPage() {
               <p className="text-center text-sm text-red-500">{error}</p>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Masuk..." : "Masuk"}
+              {loading ? "Mendaftar..." : "Daftar"}
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-[#7a7a7a] dark:text-[#cccccc]">
-            Belum punya akun?{" "}
+            Sudah punya akun?{" "}
             <Link
-              href="/register"
+              href="/login"
               className="font-medium text-[#0066cc] dark:text-[#2997ff]"
             >
-              Daftar
+              Masuk
             </Link>
           </p>
         </CardContent>

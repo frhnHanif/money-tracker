@@ -138,6 +138,11 @@ export function AccountCarousel({
           >
             {showBalance ? `Bulan ini ${netText}` : "••••"}
           </p>
+          {showBalance && balance < 0 && (
+            <p className="mt-1 text-[10px] font-medium text-red-500">
+              Saldo minus — kemungkinan ada salah input
+            </p>
+          )}
         </div>
       </div>
     );

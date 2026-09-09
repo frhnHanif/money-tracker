@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { subscriptions } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { and, eq } from "drizzle-orm";
+import { getUserId } from "@/lib/session";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const subId = parseInt(id);
@@ -18,7 +18,7 @@ export async function PATCH(
   const existing = await db
     .select()
     .from(subscriptions)
-    .where(eq(subscriptions.id, subId))
+    .where(and(eq(subscriptions.id, subId), eq(subscriptions.userId, userId)))
     .limit(1);
   if (!existing[0]) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -64,7 +64,7 @@ export async function PATCH(
   const [updated] = await db
     .update(subscriptions)
     .set(update)
-    .where(eq(subscriptions.id, subId))
+    .where(and(eq(subscriptions.id, subId), eq(subscriptions.userId, userId)))
     .returning();
 
   return NextResponse.json(updated);
@@ -74,11 +74,13 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  await db.delete(subscriptions).where(eq(subscriptions.id, parseInt(id)));
+  await db
+    .delete(subscriptions)
+    .where(and(eq(subscriptions.id, parseInt(id)), eq(subscriptions.userId, userId)));
 
   return NextResponse.json({ success: true });
 }

@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMonthlySummary } from "@/lib/db/queries";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const searchParams = req.nextUrl.searchParams;
   const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1));
   const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()));
 
-  const summary = await getMonthlySummary(month, year);
+  const summary = await getMonthlySummary(userId, month, year);
   return NextResponse.json(summary);
 }

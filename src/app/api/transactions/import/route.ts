@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { transactions, accounts, categories } from "@/lib/db/schema";
-import { eq, and, sql } from "drizzle-orm";
-import { auth } from "@/lib/auth";
-import { v4 as uuidv4 } from "uuid";
+import { eq } from "drizzle-orm";
+import { getUserId } from "@/lib/session";
 
 function parseRupiah(val: string): number {
   if (!val) return 0;
@@ -30,8 +29,8 @@ function parseDate(val: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const rows = body.data as any[];
@@ -39,9 +38,15 @@ export async function POST(req: NextRequest) {
   let imported = 0;
   let skipped = 0;
 
-  // Get existing accounts and categories for lookup
-  const existingAccounts = await db.select().from(accounts);
-  const existingCategories = await db.select().from(categories);
+  // Get existing accounts and categories for lookup (scoped to user)
+  const existingAccounts = await db
+    .select()
+    .from(accounts)
+    .where(eq(accounts.userId, userId));
+  const existingCategories = await db
+    .select()
+    .from(categories)
+    .where(eq(categories.userId, userId));
 
   const accountMap = new Map(existingAccounts.map((a) => [a.name.toLowerCase(), a.id]));
   const categoryMap = new Map(existingCategories.map((c) => [c.name.toLowerCase(), c.id]));
@@ -70,7 +75,7 @@ export async function POST(req: NextRequest) {
     if (!accountId) {
       const [newAccount] = await db
         .insert(accounts)
-        .values({ name: accountName, type: "bank", icon: "wallet", color: "#16a34a" })
+        .values({ userId, name: accountName, type: "bank", icon: "wallet", color: "#16a34a" })
         .returning();
       if (newAccount) {
         accountId = newAccount.id;
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
     if (!categoryId) {
       const [newCategory] = await db
         .insert(categories)
-        .values({ name: categoryName, type: type === "income" ? "income" : "expense", color: "#6b7280" })
+        .values({ userId, name: categoryName, type: type === "income" ? "income" : "expense", color: "#6b7280" })
         .returning();
       if (newCategory) {
         categoryId = newCategory.id;
@@ -104,6 +109,7 @@ export async function POST(req: NextRequest) {
     const txType = type === "income" ? "income" : "expense";
 
     await db.insert(transactions).values({
+      userId,
       type: txType,
       amount,
       date,

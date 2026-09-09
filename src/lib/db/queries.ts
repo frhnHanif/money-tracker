@@ -1,37 +1,46 @@
 import { db } from "../db";
 import { accounts, categories, transactions, budgets, dues, settlements, subscriptions } from "../db/schema";
 import { eq, and, gte, lte, sql, desc, asc, or } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 
 // Accounts
-export async function getAccounts() {
+export async function getAccounts(userId: string) {
   return db
     .select()
     .from(accounts)
-    .where(eq(accounts.isArchived, false))
+    .where(and(eq(accounts.userId, userId), eq(accounts.isArchived, false)))
     .orderBy(asc(accounts.sortOrder));
 }
 
-export async function getAccountById(id: number) {
-  const result = await db.select().from(accounts).where(eq(accounts.id, id)).limit(1);
+export async function getAccountById(userId: string, id: number) {
+  const result = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
+    .limit(1);
   return result[0] || null;
 }
 
 // Categories
-export async function getCategories() {
+export async function getCategories(userId: string) {
   return db
     .select()
     .from(categories)
-    .where(eq(categories.isArchived, false))
+    .where(and(eq(categories.userId, userId), eq(categories.isArchived, false)))
     .orderBy(asc(categories.sortOrder), asc(categories.name));
 }
 
-export async function getCategoryById(id: number) {
-  const result = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+export async function getCategoryById(userId: string, id: number) {
+  const result = await db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
+    .limit(1);
   return result[0] || null;
 }
 
 // Budgets
-export async function getBudgets() {
+export async function getBudgets(userId: string) {
   return db
     .select({
       id: budgets.id,
@@ -44,12 +53,13 @@ export async function getBudgets() {
     })
     .from(budgets)
     .leftJoin(categories, eq(budgets.categoryId, categories.id))
+    .where(eq(budgets.userId, userId))
     .orderBy(asc(categories.name));
 }
 
 // Dues (piutang & utang) with settled sums
-export async function getDues(direction?: "receivable" | "payable", status?: "open" | "settled") {
-  const conditions = [];
+export async function getDues(userId: string, direction?: "receivable" | "payable", status?: "open" | "settled") {
+  const conditions = [eq(dues.userId, userId)];
   if (direction) conditions.push(eq(dues.direction, direction));
   if (status) conditions.push(eq(dues.status, status));
 
@@ -75,13 +85,17 @@ export async function getDues(direction?: "receivable" | "payable", status?: "op
   return rows.map((r) => ({ ...r, settledSum: Number(r.settledSum) || 0 }));
 }
 
-export async function getDueById(id: number) {
-  const result = await db.select().from(dues).where(eq(dues.id, id)).limit(1);
+export async function getDueById(userId: string, id: number) {
+  const result = await db
+    .select()
+    .from(dues)
+    .where(and(eq(dues.id, id), eq(dues.userId, userId)))
+    .limit(1);
   return result[0] || null;
 }
 
 // Settlements for a due
-export async function getSettlementsByDue(dueId: number) {
+export async function getSettlementsByDue(userId: string, dueId: number) {
   return db
     .select({
       id: settlements.id,
@@ -93,55 +107,63 @@ export async function getSettlementsByDue(dueId: number) {
     })
     .from(settlements)
     .leftJoin(transactions, eq(settlements.transactionId, transactions.id))
-    .where(eq(settlements.dueId, dueId))
+    .innerJoin(dues, eq(settlements.dueId, dues.id))
+    .where(and(eq(settlements.dueId, dueId), eq(dues.userId, userId)))
     .orderBy(desc(settlements.createdAt));
 }
 
 // Subscriptions
-export async function getSubscriptions() {
-  return db.select().from(subscriptions).orderBy(asc(subscriptions.name));
+export async function getSubscriptions(userId: string) {
+  return db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, userId))
+    .orderBy(asc(subscriptions.name));
 }
 
-export async function getSubscriptionById(id: number) {
+export async function getSubscriptionById(userId: string, id: number) {
   const result = await db
     .select()
     .from(subscriptions)
-    .where(eq(subscriptions.id, id))
+    .where(and(eq(subscriptions.id, id), eq(subscriptions.userId, userId)))
     .limit(1);
   return result[0] || null;
 }
 
 // Last activity helpers (for notifications)
-export async function getLastTransactionDate(): Promise<string | null> {
+export async function getLastTransactionDate(userId: string): Promise<string | null> {
   const result = await db
     .select({ last: sql<string>`MAX(${transactions.date})` })
-    .from(transactions);
+    .from(transactions)
+    .where(eq(transactions.userId, userId));
   return (result[0]?.last as string) || null;
 }
 
-export async function countTransactionsOnDate(date: string): Promise<number> {
+export async function countTransactionsOnDate(userId: string, date: string): Promise<number> {
   const result = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(transactions)
-    .where(eq(transactions.date, date));
+    .where(and(eq(transactions.userId, userId), eq(transactions.date, date)));
   return Number(result[0]?.count) || 0;
 }
 
 // Transactions
 export async function getTransactions({
+  userId,
   month,
   year,
   accountId,
   categoryId,
   type,
 }: {
+  userId: string;
   month?: number;
   year?: number;
   accountId?: number;
   categoryId?: number;
   type?: string;
-} = {}) {
-  const conditions = [];
+}) {
+  const conditions: (SQL<unknown> | undefined)[] = [eq(transactions.userId, userId)];
 
   if (month && year) {
     const startDate = new Date(year, month - 1, 1);
@@ -185,18 +207,18 @@ export async function getTransactions({
     .orderBy(desc(transactions.date), desc(transactions.createdAt));
 }
 
-export async function getTransactionById(id: number) {
+export async function getTransactionById(userId: string, id: number) {
   const result = await db
     .select()
     .from(transactions)
-    .where(eq(transactions.id, id))
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
     .limit(1);
   return result[0] || null;
 }
 
 // Balance calculation
-export async function getAccountBalance(accountId: number) {
-  const account = await getAccountById(accountId);
+export async function getAccountBalance(userId: string, accountId: number) {
+  const account = await getAccountById(userId, accountId);
   if (!account) return 0;
 
   const result = await db
@@ -214,22 +236,22 @@ export async function getAccountBalance(accountId: number) {
       ), 0)`,
     })
     .from(transactions)
-    .where(eq(transactions.accountId, accountId));
+    .where(and(eq(transactions.accountId, accountId), eq(transactions.userId, userId)));
 
   return Number(account.initialBalance) + (Number(result[0]?.total) || 0);
 }
 
-export async function getTotalBalance() {
-  const allAccounts = await getAccounts();
+export async function getTotalBalance(userId: string) {
+  const allAccounts = await getAccounts(userId);
   let total = 0;
   for (const acc of allAccounts) {
-    total += await getAccountBalance(acc.id);
+    total += await getAccountBalance(userId, acc.id);
   }
   return total;
 }
 
 // Net change of an account in a given month (transfers included)
-export async function getAccountMonthNet(accountId: number, month: number, year: number) {
+export async function getAccountMonthNet(userId: string, accountId: number, month: number, year: number) {
   const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
   const endDate = new Date(year, month, 0).toISOString().split("T")[0];
 
@@ -251,6 +273,7 @@ export async function getAccountMonthNet(accountId: number, month: number, year:
     .where(
       and(
         eq(transactions.accountId, accountId),
+        eq(transactions.userId, userId),
         gte(transactions.date, startDate),
         lte(transactions.date, endDate)
       )
@@ -260,7 +283,7 @@ export async function getAccountMonthNet(accountId: number, month: number, year:
 }
 
 // Monthly summary
-export async function getMonthlySummary(month: number, year: number) {
+export async function getMonthlySummary(userId: string, month: number, year: number) {
   const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
   const endDate = new Date(year, month, 0).toISOString().split("T")[0];
 
@@ -273,6 +296,7 @@ export async function getMonthlySummary(month: number, year: number) {
     .from(transactions)
     .where(
       and(
+        eq(transactions.userId, userId),
         gte(transactions.date, startDate),
         lte(transactions.date, endDate)
       )
@@ -289,6 +313,7 @@ export async function getMonthlySummary(month: number, year: number) {
 
 // Category breakdown for pie chart
 export async function getCategoryBreakdown(
+  userId: string,
   month: number,
   year: number,
   type: "expense" | "income" = "expense"
@@ -308,6 +333,7 @@ export async function getCategoryBreakdown(
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(
       and(
+        eq(transactions.userId, userId),
         gte(transactions.date, startDate),
         lte(transactions.date, endDate),
         eq(transactions.type, type)
@@ -325,7 +351,7 @@ export async function getCategoryBreakdown(
 }
 
 // Monthly trend (6 months)
-export async function getMonthlyTrend(monthCount: number = 6) {
+export async function getMonthlyTrend(userId: string, monthCount: number = 6) {
   const result = [];
   const now = new Date();
 
@@ -333,7 +359,7 @@ export async function getMonthlyTrend(monthCount: number = 6) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const month = d.getMonth() + 1;
     const year = d.getFullYear();
-    const summary = await getMonthlySummary(month, year);
+    const summary = await getMonthlySummary(userId, month, year);
     result.push({
       month: d.toLocaleDateString("id-ID", { month: "short", year: "numeric" }),
       ...summary,
