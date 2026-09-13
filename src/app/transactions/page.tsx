@@ -314,6 +314,18 @@ export default function TransactionsPage() {
                                   {tx.accountName} →{" "}
                                   {tx.transferIn?.accountName}
                                 </Badge>
+                                {tx.fee > 0 && (
+                                  <Badge
+                                    className="px-1.5 py-0 text-[10px] leading-5"
+                                    style={{
+                                      backgroundColor: "#f9731620",
+                                      color: "#f97316",
+                                      borderColor: "transparent",
+                                    }}
+                                  >
+                                    Admin: {formatCurrency(tx.fee)}
+                                  </Badge>
+                                )}
                                 {tx.notes && (
                                   <span className="truncate text-xs text-[#7a7a7a] dark:text-[#cccccc]">
                                     {tx.notes}

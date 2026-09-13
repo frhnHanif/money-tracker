@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       description: transactions.description,
       notes: transactions.notes,
       transferGroupId: transactions.transferGroupId,
+      fee: transactions.fee,
       source: transactions.source,
       createdAt: transactions.createdAt,
       updatedAt: transactions.updatedAt,
@@ -84,18 +85,22 @@ export async function POST(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { type, amount, accountId, toAccountId, categoryId, description, notes, date } = body;
+  const { type, amount, accountId, toAccountId, categoryId, description, notes, date, fee } = body;
 
   if (type === "transfer" && toAccountId) {
     // Create paired transfer transactions
     const groupId = uuidv4();
+    const adminFee = parseInt(fee) || 0;
+    const transferAmount = parseInt(amount);
+    const receiveAmount = transferAmount - adminFee;
 
     const [outTx] = await db
       .insert(transactions)
       .values({
         userId,
         type: "transfer_out",
-        amount,
+        amount: transferAmount,
+        fee: adminFee,
         date: date || new Date().toISOString().split("T")[0],
         accountId: parseInt(accountId),
         description: description || "",
@@ -109,7 +114,8 @@ export async function POST(req: NextRequest) {
       .values({
         userId,
         type: "transfer_in",
-        amount,
+        amount: receiveAmount,
+        fee: 0,
         date: date || new Date().toISOString().split("T")[0],
         accountId: parseInt(toAccountId),
         description: description || "",

@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
+import { id } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,12 +26,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
 import { formatCurrency, formatInputCurrency } from "@/lib/utils";
 import { dueRemaining, type DueItem } from "@/lib/dues";
+import { CalendarIcon, ChevronDown } from "lucide-react";
 
 const formSchema = z.object({
   type: z.enum(["expense", "income", "transfer"]),
   amount: z.string().min(1, "Nominal harus diisi"),
+  fee: z.string().optional(),
   categoryId: z.string().optional(),
   accountId: z.string().min(1, "Akun harus dipilih"),
   toAccountId: z.string().optional(),
@@ -67,9 +71,12 @@ export function AddTransactionSheet({
   const [transactionType, setTransactionType] = useState("expense");
   const [loading, setLoading] = useState(false);
   const [displayAmount, setDisplayAmount] = useState("");
+  const [displayFee, setDisplayFee] = useState("");
   const [dueMode, setDueMode] = useState<DueMode>("none");
   const [duePerson, setDuePerson] = useState("");
   const [dueId, setDueId] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isDatePickerExpanded, setIsDatePickerExpanded] = useState(false);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -173,6 +180,7 @@ export function AddTransactionSheet({
 
       if (data.type === "transfer" && data.toAccountId) {
         body.toAccountId = parseInt(data.toAccountId);
+        body.fee = parseInt(data.fee?.replace(/\D/g, "") || "0", 10) || 0;
       }
 
       const res = await fetch("/api/transactions", {
@@ -188,10 +196,13 @@ export function AddTransactionSheet({
         invalidateAll();
         reset();
         setDisplayAmount("");
+        setDisplayFee("");
         setTransactionType("expense");
         setDueMode("none");
         setDuePerson("");
         setDueId("");
+        setSelectedDate(new Date());
+        setIsDatePickerExpanded(false);
         onOpenChange(false);
         onSuccess?.();
       }
@@ -243,6 +254,25 @@ export function AddTransactionSheet({
               <p className="text-sm text-destructive">{errors.amount.message}</p>
             )}
           </div>
+
+          {/* Admin Fee (transfer only) */}
+          {transactionType === "transfer" && (
+            <div className="space-y-2">
+              <Label>Biaya Admin (opsional)</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="Rp0"
+                value={displayFee}
+                onChange={(e) => {
+                  const formatted = formatInputCurrency(e.target.value);
+                  setDisplayFee(formatted);
+                  setValue("fee", e.target.value.replace(/\D/g, ""));
+                }}
+                className="text-lg font-semibold text-center h-12"
+              />
+            </div>
+          )}
 
           {/* Category */}
           {transactionType !== "transfer" && (
@@ -405,35 +435,36 @@ export function AddTransactionSheet({
           {/* Date */}
           <div className="space-y-2">
             <Label>Tanggal</Label>
-            <Input
-              type="text"
-              placeholder="DD/MM/YYYY"
-              value={(() => {
-                const d = watch("date");
-                if (!d) return "";
-                const [y, m, day] = d.split("-");
-                return `${day}/${m}/${y}`;
-              })()}
-              onChange={(e) => {
-                const raw = e.target.value.replace(/\D/g, "");
-                if (raw.length === 8) {
-                  const day = raw.slice(0, 2);
-                  const month = raw.slice(2, 4);
-                  const year = raw.slice(4, 8);
-                  setValue("date", `${year}-${month}-${day}`);
-                } else {
-                  setValue("date", "");
-                }
-              }}
-              onFocus={(e) => {
-                // Clear for easier editing
-                const d = watch("date");
-                if (d) {
-                  const [y, m, day] = d.split("-");
-                  e.target.value = `${day}${m}${y}`;
-                }
-              }}
-            />
+            <button
+              type="button"
+              onClick={() => setIsDatePickerExpanded(!isDatePickerExpanded)}
+              className="flex h-12 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <span className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4 opacity-50" />
+                {format(selectedDate, "d MMMM yyyy", { locale: id })}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 opacity-50 transition-transform duration-200 ${
+                  isDatePickerExpanded ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+            {isDatePickerExpanded && (
+              <div className="rounded-md border bg-popover p-3 shadow-sm flex justify-center">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(day) => {
+                    if (day) {
+                      setSelectedDate(day);
+                      setValue("date", format(day, "yyyy-MM-dd"));
+                      setIsDatePickerExpanded(false);
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           <SheetFooter className="pt-4">
