@@ -1,6 +1,5 @@
 "use client";
-
-import { useState } from "react";
+import { useBalanceVisibility } from "@/contexts/balance-visibility-context";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { AccountCarousel } from "@/components/home/account-carousel";
@@ -67,7 +66,7 @@ export default function HomePage() {
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
-  const [showBalance, setShowBalance] = useState(false);
+  const { showBalance, toggleBalance } = useBalanceVisibility();
 
   const { data: accounts = [], isLoading: accountsLoading } = useQuery<AccountLike[]>({
     queryKey: ["accounts"],
@@ -147,7 +146,7 @@ export default function HomePage() {
           accounts={accounts}
           balances={balances}
           showBalance={showBalance}
-          onToggleBalance={() => setShowBalance((v) => !v)}
+          onToggleBalance={toggleBalance}
           isLoading={accountsLoading || balancesLoading}
         />
 

@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { SessionProvider } from "next-auth/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BottomNav } from "@/components/bottom-nav";
-import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import { Toaster } from "sonner";
+import { BalanceVisibilityProvider } from "@/contexts/balance-visibility-context";
 
 function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
@@ -13,8 +12,10 @@ function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster position="top-center" richColors />
+        <BalanceVisibilityProvider>
+          {children}
+          <Toaster position="top-center" richColors />
+        </BalanceVisibilityProvider>
       </QueryClientProvider>
     </SessionProvider>
   );
