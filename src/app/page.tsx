@@ -69,14 +69,16 @@ export default function HomePage() {
   const year = now.getFullYear();
   const [showBalance, setShowBalance] = useState(false);
 
-  const { data: accounts = [] } = useQuery<AccountLike[]>({
+  const { data: accounts = [], isLoading: accountsLoading } = useQuery<AccountLike[]>({
     queryKey: ["accounts"],
     queryFn: () => fetch("/api/accounts").then((r) => r.json()),
+    staleTime: 60 * 1000,
   });
 
-  const { data: balances = {} } = useQuery<Record<number, AccountBalance>>({
+  const { data: balances = {}, isLoading: balancesLoading } = useQuery<Record<number, AccountBalance>>({
     queryKey: ["balances"],
     queryFn: () => fetch("/api/accounts/balances").then((r) => r.json()),
+    staleTime: 60 * 1000,
   });
 
   const { data: summary } = useQuery<SummaryLike>({
@@ -146,6 +148,7 @@ export default function HomePage() {
           balances={balances}
           showBalance={showBalance}
           onToggleBalance={() => setShowBalance((v) => !v)}
+          isLoading={accountsLoading || balancesLoading}
         />
 
         {/* Monthly Summary — compact */}

@@ -216,7 +216,7 @@ export async function getTransactionById(userId: string, id: number) {
   return result[0] || null;
 }
 
-// Balance calculation
+// Balance calculation & caching
 export async function getAccountBalance(userId: string, accountId: number) {
   const account = await getAccountById(userId, accountId);
   if (!account) return 0;
@@ -241,13 +241,65 @@ export async function getAccountBalance(userId: string, accountId: number) {
   return Number(account.initialBalance) + (Number(result[0]?.total) || 0);
 }
 
+export async function updateAccountBalance(userId: string, accountId: number) {
+  const balance = await getAccountBalance(userId, accountId);
+  await db
+    .update(accounts)
+    .set({ currentBalance: balance })
+    .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)));
+  return balance;
+}
+
+export async function recalculateUserBalances(userId: string) {
+  const allAccounts = await getAccounts(userId);
+  for (const acc of allAccounts) {
+    await updateAccountBalance(userId, acc.id);
+  }
+}
+
 export async function getTotalBalance(userId: string) {
   const allAccounts = await getAccounts(userId);
-  let total = 0;
-  for (const acc of allAccounts) {
-    total += await getAccountBalance(userId, acc.id);
+  return allAccounts.reduce((sum, acc) => sum + (acc.currentBalance ?? 0), 0);
+}
+
+export async function getAccountsMonthNetBatch(
+  userId: string,
+  month: number,
+  year: number
+): Promise<Record<number, number>> {
+  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
+  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+
+  const rows = await db
+    .select({
+      accountId: transactions.accountId,
+      total: sql<number>`COALESCE(SUM(
+        CASE
+          WHEN ${transactions.type} = 'income' THEN ${transactions.amount}
+          WHEN ${transactions.type} = 'transfer_in' THEN ${transactions.amount}
+          WHEN ${transactions.type} = 'adjustment_in' THEN ${transactions.amount}
+          WHEN ${transactions.type} = 'expense' THEN -${transactions.amount}
+          WHEN ${transactions.type} = 'transfer_out' THEN -${transactions.amount}
+          WHEN ${transactions.type} = 'adjustment_out' THEN -${transactions.amount}
+          ELSE 0
+        END
+      ), 0)::int`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        gte(transactions.date, startDate),
+        lte(transactions.date, endDate)
+      )
+    )
+    .groupBy(transactions.accountId);
+
+  const result: Record<number, number> = {};
+  for (const r of rows) {
+    result[r.accountId] = Number(r.total) || 0;
   }
-  return total;
+  return result;
 }
 
 // Net change of an account in a given month (transfers included)

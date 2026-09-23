@@ -14,14 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, formatDate, groupTransactions } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, groupTransactions } from "@/lib/utils";
+import { TransactionActionSheet } from "@/components/transaction-action-sheet";
+import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
+import { useLongPress } from "@/hooks/use-long-press";
 import {
   ChevronLeft,
   ChevronRight,
   Search,
   X,
   ArrowRightLeft,
-  Trash2,
   Plus,
   Wrench,
 } from "lucide-react";
@@ -36,11 +38,201 @@ type TxRow = {
   type: string;
   description?: string;
   categoryName?: string;
+  categoryColor?: string;
+  categoryId?: number | null;
   amount?: number;
   accountName?: string;
-  transferIn?: { accountName?: string };
+  accountColor?: string;
+  accountId?: number;
+  date?: string;
+  notes?: string;
+  fee?: number;
+  transferIn?: { id?: number; accountId?: number; accountName?: string };
   groupedTransfer?: boolean;
 };
+
+function TransactionRowItem({
+  tx,
+  onOpenMenu,
+}: {
+  tx: TxRow;
+  onOpenMenu: (tx: TxRow) => void;
+}) {
+  const { isPressing, handlers } = useLongPress({
+    onLongPress: () => onOpenMenu(tx),
+  });
+
+  if (tx.groupedTransfer) {
+    return (
+      <div
+        {...handlers}
+        className={cn(
+          "flex items-center justify-between rounded-lg p-3 transition-all select-none cursor-pointer",
+          isPressing
+            ? "bg-[#ebebee] dark:bg-[#343438] scale-[0.99]"
+            : "hover:bg-[#f5f5f7] dark:hover:bg-[#2a2a2c]"
+        )}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+            style={{
+              backgroundColor: (tx.categoryColor || "#3b82f6") + "20",
+            }}
+          >
+            <ArrowRightLeft
+              className="h-4 w-4"
+              style={{
+                color: tx.categoryColor || "#3b82f6",
+              }}
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
+              {tx.description || "Transfer"}
+            </p>
+            <div className="flex flex-wrap items-center gap-1">
+              <Badge
+                className="px-1.5 py-0 text-[10px] leading-5"
+                style={{
+                  backgroundColor: (tx.categoryColor || "#3b82f6") + "20",
+                  color: tx.categoryColor || "#3b82f6",
+                  borderColor: "transparent",
+                }}
+              >
+                {tx.accountName} → {tx.transferIn?.accountName}
+              </Badge>
+              {typeof tx.fee === "number" && tx.fee > 0 && (
+                <Badge
+                  className="px-1.5 py-0 text-[10px] leading-5"
+                  style={{
+                    backgroundColor: "#f9731620",
+                    color: "#f97316",
+                    borderColor: "transparent",
+                  }}
+                >
+                  Admin: {formatCurrency(tx.fee)}
+                </Badge>
+              )}
+              {tx.notes && (
+                <span className="truncate text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+                  {tx.notes}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center pl-3">
+          <p className="text-sm font-semibold text-[#7a7a7a] dark:text-[#cccccc]">
+            {formatCurrency(tx.amount ?? 0)}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const isAdjustment =
+    tx.type === "adjustment_in" || tx.type === "adjustment_out";
+
+  return (
+    <div
+      {...handlers}
+      className={cn(
+        "flex items-center justify-between rounded-lg p-3 transition-all select-none cursor-pointer",
+        isPressing
+          ? "bg-[#ebebee] dark:bg-[#343438] scale-[0.99]"
+          : "hover:bg-[#f5f5f7] dark:hover:bg-[#2a2a2c]"
+      )}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+          style={{
+            backgroundColor: isAdjustment
+              ? "#7a7a7a20"
+              : (tx.categoryColor || "#6b7280") + "20",
+          }}
+        >
+          {isAdjustment ? (
+            <Wrench className="h-4 w-4" style={{ color: "#7a7a7a" }} />
+          ) : (
+            <span
+              className="text-xs font-bold"
+              style={{ color: tx.categoryColor || "#6b7280" }}
+            >
+              {(tx.categoryName || "?").slice(0, 2).toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
+            {tx.description ||
+              tx.categoryName ||
+              (isAdjustment ? "Penyesuaian saldo" : "Transaksi")}
+          </p>
+          <div className="flex flex-wrap items-center gap-1">
+            {isAdjustment ? (
+              <Badge
+                className="px-1.5 py-0 text-[10px] leading-5"
+                style={{
+                  backgroundColor: "#7a7a7a20",
+                  color: "#7a7a7a",
+                  borderColor: "transparent",
+                }}
+              >
+                Penyesuaian
+              </Badge>
+            ) : (
+              <Badge
+                className="px-1.5 py-0 text-[10px] leading-5"
+                style={{
+                  backgroundColor: (tx.categoryColor || "#6b7280") + "20",
+                  color: tx.categoryColor || "#6b7280",
+                  borderColor: "transparent",
+                }}
+              >
+                {tx.categoryName || "Uncategorized"}
+              </Badge>
+            )}
+            <Badge
+              className="px-1.5 py-0 text-[10px] leading-5"
+              style={{
+                backgroundColor: (tx.accountColor || "#6b7280") + "20",
+                color: tx.accountColor || "#6b7280",
+                borderColor: "transparent",
+              }}
+            >
+              {tx.accountName}
+            </Badge>
+            {tx.notes && (
+              <span className="truncate text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+                {tx.notes}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center pl-3">
+        <p
+          className={`text-sm font-semibold ${
+            tx.type === "income" || tx.type === "transfer_in"
+              ? "text-[#16a34a] dark:text-[#4ade80]"
+              : isAdjustment
+                ? "text-[#7a7a7a] dark:text-[#cccccc]"
+                : "text-red-500 dark:text-red-400"
+          }`}
+        >
+          {tx.type === "income" || tx.type === "transfer_in"
+            ? "+"
+            : isAdjustment
+              ? "±"
+              : "-"}
+          {formatCurrency(tx.amount ?? 0)}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
@@ -61,6 +253,8 @@ export default function TransactionsPage() {
   const [accountFilter, setAccountFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [actionTarget, setActionTarget] = useState<TxRow | null>(null);
+  const [editTarget, setEditTarget] = useState<TxRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TxRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -86,6 +280,11 @@ export default function TransactionsPage() {
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts"],
     queryFn: () => fetch("/api/accounts").then((r) => r.json()),
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => fetch("/api/categories").then((r) => r.json()),
   });
 
   const { data: summary } = useQuery({
@@ -276,199 +475,44 @@ export default function TransactionsPage() {
                   {formatDate(date, "long")}
                 </p>
                 <div className="space-y-1">
-                    {(txs as any[]).map((tx: any) =>
-                      tx.groupedTransfer ? (
-                        <div
-                          key={tx.id}
-                          className="flex items-center justify-between rounded-lg p-3 hover:bg-[#f5f5f7] dark:hover:bg-[#2a2a2c] transition-colors"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                              style={{
-                                backgroundColor:
-                                  (tx.categoryColor || "#3b82f6") + "20",
-                              }}
-                            >
-                              <ArrowRightLeft
-                                className="h-4 w-4"
-                                style={{
-                                  color: tx.categoryColor || "#3b82f6",
-                                }}
-                              />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
-                                {tx.description || "Transfer"}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-1">
-                                <Badge
-                                  className="px-1.5 py-0 text-[10px] leading-5"
-                                  style={{
-                                    backgroundColor:
-                                      (tx.categoryColor || "#3b82f6") + "20",
-                                    color: tx.categoryColor || "#3b82f6",
-                                    borderColor: "transparent",
-                                  }}
-                                >
-                                  {tx.accountName} →{" "}
-                                  {tx.transferIn?.accountName}
-                                </Badge>
-                                {tx.fee > 0 && (
-                                  <Badge
-                                    className="px-1.5 py-0 text-[10px] leading-5"
-                                    style={{
-                                      backgroundColor: "#f9731620",
-                                      color: "#f97316",
-                                      borderColor: "transparent",
-                                    }}
-                                  >
-                                    Admin: {formatCurrency(tx.fee)}
-                                  </Badge>
-                                )}
-                                {tx.notes && (
-                                  <span className="truncate text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-                                    {tx.notes}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1">
-                            <p className="text-sm font-semibold text-[#7a7a7a] dark:text-[#cccccc]">
-                              {formatCurrency(tx.amount)}
-                            </p>
-                            <button
-                              onClick={() => setDeleteTarget(tx)}
-                              aria-label="Hapus transaksi"
-                              className="flex h-9 w-9 items-center justify-center rounded-full text-[#7a7a7a] hover:bg-red-50 hover:text-red-500 dark:text-[#cccccc] dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                      <div
-                        key={tx.id}
-                        className="flex items-center justify-between rounded-lg p-3 hover:bg-[#f5f5f7] dark:hover:bg-[#2a2a2c] transition-colors"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                            style={{
-                              backgroundColor:
-                                tx.type === "adjustment_in" ||
-                                tx.type === "adjustment_out"
-                                  ? "#7a7a7a20"
-                                  : (tx.categoryColor || "#6b7280") + "20",
-                            }}
-                          >
-                            {tx.type === "adjustment_in" ||
-                            tx.type === "adjustment_out" ? (
-                              <Wrench
-                                className="h-4 w-4"
-                                style={{ color: "#7a7a7a" }}
-                              />
-                            ) : (
-                            <span
-                              className="text-xs font-bold"
-                              style={{ color: tx.categoryColor || "#6b7280" }}
-                            >
-                              {(tx.categoryName || "?")
-                                .slice(0, 2)
-                                .toUpperCase()}
-                            </span>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
-                              {tx.description ||
-                                tx.categoryName ||
-                                (tx.type === "adjustment_in" ||
-                                tx.type === "adjustment_out"
-                                  ? "Penyesuaian saldo"
-                                  : "Transaksi")}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-1">
-                              {tx.type === "adjustment_in" ||
-                              tx.type === "adjustment_out" ? (
-                                <Badge
-                                  className="px-1.5 py-0 text-[10px] leading-5"
-                                  style={{
-                                    backgroundColor: "#7a7a7a20",
-                                    color: "#7a7a7a",
-                                    borderColor: "transparent",
-                                  }}
-                                >
-                                  Penyesuaian
-                                </Badge>
-                              ) : (
-                              <Badge
-                                className="px-1.5 py-0 text-[10px] leading-5"
-                                style={{
-                                  backgroundColor:
-                                    (tx.categoryColor || "#6b7280") + "20",
-                                  color: tx.categoryColor || "#6b7280",
-                                  borderColor: "transparent",
-                                }}
-                              >
-                                {tx.categoryName || "Uncategorized"}
-                              </Badge>
-                              )}
-                              <Badge
-                                className="px-1.5 py-0 text-[10px] leading-5"
-                                style={{
-                                  backgroundColor:
-                                    (tx.accountColor || "#6b7280") + "20",
-                                  color: tx.accountColor || "#6b7280",
-                                  borderColor: "transparent",
-                                }}
-                              >
-                                {tx.accountName}
-                              </Badge>
-                              {tx.notes && (
-                                <span className="truncate text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-                                  {tx.notes}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <p
-                            className={`text-sm font-semibold ${
-                              tx.type === "income" || tx.type === "transfer_in"
-                                ? "text-[#16a34a] dark:text-[#4ade80]"
-                                : tx.type === "adjustment_in" ||
-                                    tx.type === "adjustment_out"
-                                  ? "text-[#7a7a7a] dark:text-[#cccccc]"
-                                  : "text-red-500 dark:text-red-400"
-                            }`}
-                          >
-                            {tx.type === "income" || tx.type === "transfer_in"
-                              ? "+"
-                              : tx.type === "adjustment_in" ||
-                                  tx.type === "adjustment_out"
-                                ? "±"
-                                : "-"}
-                            {formatCurrency(tx.amount)}
-                          </p>
-                          <button
-                            onClick={() => setDeleteTarget(tx)}
-                            aria-label="Hapus transaksi"
-                            className="flex h-9 w-9 items-center justify-center rounded-full text-[#7a7a7a] hover:bg-red-50 hover:text-red-500 dark:text-[#cccccc] dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                      )
-                    )}
+                  {(txs as TxRow[]).map((tx: TxRow) => (
+                    <TransactionRowItem
+                      key={tx.id}
+                      tx={tx}
+                      onOpenMenu={(target) => setActionTarget(target)}
+                    />
+                  ))}
                 </div>
               </div>
             ))
         )}
       </div>
+
+      <TransactionActionSheet
+        open={!!actionTarget}
+        onOpenChange={(open) => {
+          if (!open) setActionTarget(null);
+        }}
+        transaction={actionTarget}
+        onEdit={(tx) => {
+          setActionTarget(null);
+          setEditTarget(tx);
+        }}
+        onDelete={(tx) => {
+          setActionTarget(null);
+          setDeleteTarget(tx);
+        }}
+      />
+
+      <EditTransactionSheet
+        open={!!editTarget}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        transaction={editTarget}
+        accounts={accounts}
+        categories={categories}
+      />
 
       <ConfirmDialog
         open={!!deleteTarget}

@@ -55,6 +55,7 @@ export const accounts = pgTable(
   icon: varchar("icon", { length: 50 }).default("wallet"),
   color: varchar("color", { length: 7 }).default("#16a34a"),
   initialBalance: integer("initial_balance").notNull().default(0),
+  currentBalance: integer("current_balance").notNull().default(0),
   isArchived: boolean("is_archived").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getUserId } from "@/lib/session";
 import {
   getAccounts,
-  getAccountBalance,
-  getAccountMonthNet,
+  getAccountsMonthNetBatch,
 } from "@/lib/db/queries";
 
 export async function GET() {
@@ -15,6 +14,8 @@ export async function GET() {
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
+  const monthNetMap = await getAccountsMonthNetBatch(userId, month, year);
+
   const balances: Record<
     number,
     { balance: number; monthNet: number }
@@ -22,8 +23,8 @@ export async function GET() {
 
   for (const acc of allAccounts) {
     balances[acc.id] = {
-      balance: await getAccountBalance(userId, acc.id),
-      monthNet: await getAccountMonthNet(userId, acc.id, month, year),
+      balance: acc.currentBalance ?? 0,
+      monthNet: monthNetMap[acc.id] || 0,
     };
   }
 

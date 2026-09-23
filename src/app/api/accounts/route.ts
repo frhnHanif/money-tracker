@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       icon: body.icon || "wallet",
       color: body.color || "#16a34a",
       initialBalance: body.initialBalance || 0,
+      currentBalance: body.initialBalance || 0,
       sortOrder,
     })
     .returning();

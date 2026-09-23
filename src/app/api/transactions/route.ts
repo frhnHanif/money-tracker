@@ -4,6 +4,7 @@ import { transactions, accounts, categories } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { getUserId } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
+import { updateAccountBalance } from "@/lib/db/queries";
 
 export async function GET(req: NextRequest) {
   const userId = await getUserId();
@@ -124,6 +125,9 @@ export async function POST(req: NextRequest) {
       })
       .returning();
 
+    await updateAccountBalance(userId, parseInt(accountId));
+    await updateAccountBalance(userId, parseInt(toAccountId));
+
     return NextResponse.json({ out: outTx, in: inTx });
   }
 
@@ -140,6 +144,8 @@ export async function POST(req: NextRequest) {
       notes: notes || "",
     })
     .returning();
+
+  await updateAccountBalance(userId, parseInt(accountId));
 
   return NextResponse.json(result);
 }

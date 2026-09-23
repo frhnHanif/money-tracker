@@ -55,11 +55,13 @@ export default function AccountsPage() {
   const { data: accounts = [] } = useQuery<AccountLike[]>({
     queryKey: ["accounts"],
     queryFn: () => fetch("/api/accounts").then((r) => r.json()),
+    staleTime: 60 * 1000,
   });
 
-  const { data: balances = {} } = useQuery<Record<number, AccountBalance>>({
+  const { data: balances = {}, isLoading: balancesLoading } = useQuery<Record<number, AccountBalance>>({
     queryKey: ["balances"],
     queryFn: () => fetch("/api/accounts/balances").then((r) => r.json()),
+    staleTime: 60 * 1000,
   });
 
   const deleteAccount = useMutation({
@@ -127,7 +129,12 @@ export default function AccountsPage() {
                     {account.name}
                   </p>
                   <p className={`text-xs ${bal < 0 ? "text-red-500 dark:text-red-400" : "text-[#7a7a7a] dark:text-[#cccccc]"}`}>
-                    {typeLabel(account.type)} • {formatCurrency(bal)}
+                    {typeLabel(account.type)} •{" "}
+                    {balancesLoading && balances[account.id] === undefined ? (
+                      <span className="inline-block h-3 w-16 align-middle rounded bg-black/10 dark:bg-white/10 animate-pulse" />
+                    ) : (
+                      formatCurrency(bal)
+                    )}
                     {bal < 0 ? " — saldo minus, cek input" : ""}
                   </p>
                 </div>

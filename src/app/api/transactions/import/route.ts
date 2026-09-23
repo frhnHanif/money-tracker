@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { transactions, accounts, categories } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getUserId } from "@/lib/session";
+import { recalculateUserBalances } from "@/lib/db/queries";
 
 function parseRupiah(val: string): number {
   if (!val) return 0;
@@ -121,6 +122,10 @@ export async function POST(req: NextRequest) {
     });
 
     imported++;
+  }
+
+  if (imported > 0) {
+    await recalculateUserBalances(userId);
   }
 
   return NextResponse.json({ imported, skipped });
