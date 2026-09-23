@@ -30,16 +30,16 @@ function Calendar({
           "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
         week: "flex justify-center w-full mt-2",
         day: "h-8 w-8 p-0 font-normal aria-selected:opacity-100 inline-flex items-center justify-center rounded-md text-sm hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-        range_start: "day-range-start",
-        range_end: "day-range-end",
+        range_start: "day-range-start rounded-l-md bg-primary text-primary-foreground",
+        range_end: "day-range-end rounded-r-md bg-primary text-primary-foreground",
         selected:
           "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        today: "bg-accent text-accent-foreground",
+        today: "bg-accent text-accent-foreground font-semibold",
         outside:
           "day-outside text-muted-foreground aria-selected:bg-accent/50 aria-selected:text-muted-foreground",
         disabled: "text-muted-foreground opacity-50",
         range_middle:
-          "aria-selected:bg-accent aria-selected:text-accent-foreground",
+          "aria-selected:bg-accent/80 aria-selected:text-accent-foreground rounded-none",
         hidden: "invisible",
         ...classNames,
       }}

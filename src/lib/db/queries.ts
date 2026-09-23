@@ -363,6 +363,40 @@ export async function getMonthlySummary(userId: string, month: number, year: num
   };
 }
 
+// Date range summary
+export async function getDateRangeSummary(
+  userId: string,
+  startDate: string,
+  endDate: string
+) {
+  const result = await db
+    .select({
+      totalIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amount} ELSE 0 END), 0)`,
+      totalExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${transactions.amount} ELSE 0 END), 0)`,
+      daysTracked: sql<number>`COUNT(DISTINCT ${transactions.date})`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        gte(transactions.date, startDate),
+        lte(transactions.date, endDate)
+      )
+    );
+
+  const startD = new Date(startDate);
+  const endD = new Date(endDate);
+  const diffDays = Math.max(1, Math.round((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+  return {
+    totalIncome: Number(result[0]?.totalIncome) || 0,
+    totalExpense: Number(result[0]?.totalExpense) || 0,
+    net: (Number(result[0]?.totalIncome) || 0) - (Number(result[0]?.totalExpense) || 0),
+    daysTracked: Number(result[0]?.daysTracked) || 0,
+    daysInMonth: diffDays,
+  };
+}
+
 // Category breakdown for pie chart
 export async function getCategoryBreakdown(
   userId: string,

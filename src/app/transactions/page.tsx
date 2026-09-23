@@ -17,7 +17,10 @@ import {
 import { cn, formatCurrency, formatDate, groupTransactions } from "@/lib/utils";
 import { TransactionActionSheet } from "@/components/transaction-action-sheet";
 import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
+import { DateRangePickerSheet } from "@/components/date-range-picker-sheet";
 import { useLongPress } from "@/hooks/use-long-press";
+import { format, subDays } from "date-fns";
+import { id } from "date-fns/locale";
 import {
   ChevronLeft,
   ChevronRight,
@@ -26,6 +29,7 @@ import {
   ArrowRightLeft,
   Plus,
   Wrench,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 
 const MONTHS = [
@@ -237,19 +241,55 @@ function TransactionRowItem({
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
   const [initial] = useState(() => {
+    const now = new Date();
     if (typeof window === "undefined") {
-      const now = new Date();
-      return { month: now.getMonth() + 1, year: now.getFullYear() };
+      return {
+        dateRange: { from: subDays(now, 6), to: now },
+        label: "7 Hari Terakhir",
+        month: now.getMonth() + 1,
+        year: now.getFullYear(),
+      };
     }
     const params = new URLSearchParams(window.location.search);
+    const startParam = params.get("startDate");
+    const endParam = params.get("endDate");
+    if (startParam && endParam) {
+      const from = new Date(startParam + "T00:00:00");
+      const to = new Date(endParam + "T23:59:59");
+      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+        return {
+          dateRange: { from, to },
+          label: `${format(from, "d MMM", { locale: id })} - ${format(to, "d MMM yyyy", { locale: id })}`,
+          month: from.getMonth() + 1,
+          year: from.getFullYear(),
+        };
+      }
+    }
     const m = Number(params.get("month"));
     const y = Number(params.get("year"));
-    if (m >= 1 && m <= 12 && y >= 2000) return { month: m, year: y };
-    const now = new Date();
-    return { month: now.getMonth() + 1, year: now.getFullYear() };
+    if (m >= 1 && m <= 12 && y >= 2000) {
+      const monthStart = new Date(y, m - 1, 1);
+      const monthEnd = new Date(y, m, 0);
+      return {
+        dateRange: { from: monthStart, to: monthEnd },
+        label: `${MONTHS[m - 1]} ${y}`,
+        month: m,
+        year: y,
+      };
+    }
+    return {
+      dateRange: { from: subDays(now, 6), to: now },
+      label: "7 Hari Terakhir",
+      month: now.getMonth() + 1,
+      year: now.getFullYear(),
+    };
   });
+
+  const [dateRange, setDateRange] = useState(initial.dateRange);
+  const [rangeLabel, setRangeLabel] = useState(initial.label);
   const [month, setMonth] = useState(initial.month);
   const [year, setYear] = useState(initial.year);
+  const [isDateSheetOpen, setIsDateSheetOpen] = useState(false);
   const [accountFilter, setAccountFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -258,18 +298,16 @@ export default function TransactionsPage() {
   const [deleteTarget, setDeleteTarget] = useState<TxRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const syncUrl = (m: number, y: number) => {
-    if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", `?month=${m}&year=${y}`);
-    }
-  };
+  const startDateStr = format(dateRange.from, "yyyy-MM-dd");
+  const endDateStr = format(dateRange.to, "yyyy-MM-dd");
+  const isCustomFilterActive = rangeLabel !== "7 Hari Terakhir";
 
   const { data: transactions = [], isLoading } = useQuery({
-    queryKey: ["transactions", month, year, accountFilter, typeFilter],
+    queryKey: ["transactions", startDateStr, endDateStr, accountFilter, typeFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
-      params.set("month", String(month));
-      params.set("year", String(year));
+      params.set("startDate", startDateStr);
+      params.set("endDate", endDateStr);
       if (accountFilter !== "all") params.set("accountId", accountFilter);
       if (typeFilter !== "all") params.set("type", typeFilter);
       const res = await fetch(`/api/transactions?${params}`);
@@ -288,32 +326,73 @@ export default function TransactionsPage() {
   });
 
   const { data: summary } = useQuery({
-    queryKey: ["summary", month, year],
+    queryKey: ["summary", startDateStr, endDateStr],
     queryFn: () =>
-      fetch(`/api/transactions/summary?month=${month}&year=${year}`).then((r) =>
+      fetch(`/api/transactions/summary?startDate=${startDateStr}&endDate=${endDateStr}`).then((r) =>
         r.json()
       ),
   });
 
   const prevMonth = () => {
-    if (month === 1) {
-      setMonth(12);
-      setYear(year - 1);
-      syncUrl(12, year - 1);
-    } else {
-      setMonth(month - 1);
-      syncUrl(month - 1, year);
+    let nextM = month - 1;
+    let nextY = year;
+    if (nextM < 1) {
+      nextM = 12;
+      nextY = year - 1;
+    }
+    const newFrom = new Date(nextY, nextM - 1, 1);
+    const newTo = new Date(nextY, nextM, 0);
+    setMonth(nextM);
+    setYear(nextY);
+    setDateRange({ from: newFrom, to: newTo });
+    setRangeLabel(`${MONTHS[nextM - 1]} ${nextY}`);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `?month=${nextM}&year=${nextY}`);
     }
   };
 
   const nextMonth = () => {
-    if (month === 12) {
-      setMonth(1);
-      setYear(year + 1);
-      syncUrl(1, year + 1);
-    } else {
-      setMonth(month + 1);
-      syncUrl(month + 1, year);
+    let nextM = month + 1;
+    let nextY = year;
+    if (nextM > 12) {
+      nextM = 1;
+      nextY = year + 1;
+    }
+    const newFrom = new Date(nextY, nextM - 1, 1);
+    const newTo = new Date(nextY, nextM, 0);
+    setMonth(nextM);
+    setYear(nextY);
+    setDateRange({ from: newFrom, to: newTo });
+    setRangeLabel(`${MONTHS[nextM - 1]} ${nextY}`);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `?month=${nextM}&year=${nextY}`);
+    }
+  };
+
+  const handleApplyDateRange = (range: { from: Date; to: Date }, label?: string) => {
+    setDateRange(range);
+    const customLabel =
+      label ||
+      `${format(range.from, "d MMM", { locale: id })} - ${format(range.to, "d MMM yyyy", { locale: id })}`;
+    setRangeLabel(customLabel);
+    setMonth(range.from.getMonth() + 1);
+    setYear(range.from.getFullYear());
+    if (typeof window !== "undefined") {
+      const s = format(range.from, "yyyy-MM-dd");
+      const e = format(range.to, "yyyy-MM-dd");
+      window.history.replaceState(null, "", `?startDate=${s}&endDate=${e}`);
+    }
+  };
+
+  const handleResetToDefault = () => {
+    const today = new Date();
+    const range = { from: subDays(today, 6), to: today };
+    setDateRange(range);
+    setRangeLabel("7 Hari Terakhir");
+    setMonth(today.getMonth() + 1);
+    setYear(today.getFullYear());
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", window.location.pathname);
     }
   };
 
@@ -363,15 +442,34 @@ export default function TransactionsPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* Month Selector */}
+        {/* Month / Period Selector */}
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="icon" onClick={prevMonth} className="text-[#7a7a7a] hover:bg-[#f5f5f7] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c]">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={prevMonth}
+            className="text-[#7a7a7a] hover:bg-[#f5f5f7] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c]"
+          >
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          <h2 className="text-base font-semibold tracking-[-0.21px] text-[#1d1d1f] dark:text-white">
-            {MONTHS[month - 1]} {year}
-          </h2>
-          <Button variant="ghost" size="icon" onClick={nextMonth} className="text-[#7a7a7a] hover:bg-[#f5f5f7] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c]">
+          <button
+            type="button"
+            onClick={() => setIsDateSheetOpen(true)}
+            className="flex flex-col items-center rounded-lg px-3 py-1 transition-colors hover:bg-[#f5f5f7] dark:hover:bg-[#2a2a2c]"
+          >
+            <h2 className="text-base font-semibold tracking-[-0.21px] text-[#1d1d1f] dark:text-white">
+              {rangeLabel}
+            </h2>
+            <p className="text-[11px] text-[#7a7a7a] dark:text-[#cccccc]">
+              {format(dateRange.from, "d MMM", { locale: id })} - {format(dateRange.to, "d MMM yyyy", { locale: id })}
+            </p>
+          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={nextMonth}
+            className="text-[#7a7a7a] hover:bg-[#f5f5f7] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c]"
+          >
             <ChevronRight className="h-5 w-5" />
           </Button>
         </div>
@@ -392,24 +490,43 @@ export default function TransactionsPage() {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a7a7a] dark:text-[#cccccc]" />
-          <input
-            type="text"
-            placeholder="Cari transaksi..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-[#e0e0e0] bg-white py-2.5 pl-10 pr-10 text-sm text-[#1d1d1f] placeholder:text-[#7a7a7a] focus:border-[#0066cc] focus:outline-none focus:ring-1 focus:ring-[#0066cc] dark:border-white/15 dark:bg-[#272729] dark:text-white dark:placeholder:text-[#cccccc] dark:focus:border-[#2997ff] dark:focus:ring-[#2997ff]"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7a7a7a] hover:text-[#333333] dark:text-[#cccccc] dark:hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+        {/* Search & Date Filter Bar */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7a7a7a] dark:text-[#cccccc]" />
+            <input
+              type="text"
+              placeholder="Cari transaksi..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-[#e0e0e0] bg-white py-2.5 pl-10 pr-10 text-sm text-[#1d1d1f] placeholder:text-[#7a7a7a] focus:border-[#0066cc] focus:outline-none focus:ring-1 focus:ring-[#0066cc] dark:border-white/15 dark:bg-[#272729] dark:text-white dark:placeholder:text-[#cccccc] dark:focus:border-[#2997ff] dark:focus:ring-[#2997ff]"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7a7a7a] hover:text-[#333333] dark:text-[#cccccc] dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsDateSheetOpen(true)}
+            className={cn(
+              "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-all active:scale-95",
+              isCustomFilterActive
+                ? "border-[#0066cc] bg-[#0066cc]/10 text-[#0066cc] dark:border-[#2997ff] dark:bg-[#2997ff]/20 dark:text-[#2997ff]"
+                : "border-[#e0e0e0] bg-white text-[#7a7a7a] hover:bg-[#f5f5f7] dark:border-white/15 dark:bg-[#272729] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c]"
+            )}
+            title="Filter rentang tanggal"
+            aria-label="Filter rentang tanggal"
+          >
+            <CalendarIcon className="h-4 w-4" />
+            {isCustomFilterActive && (
+              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-[#0066cc] ring-2 ring-white dark:bg-[#2997ff] dark:ring-[#1c1c1e]" />
+            )}
+          </button>
         </div>
 
         {/* Filters */}
@@ -451,7 +568,7 @@ export default function TransactionsPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-[#1d1d1f] dark:text-white">
-                Belum ada transaksi bulan ini
+                Belum ada transaksi pada periode ini
               </p>
               <p className="mt-1 text-xs text-[#7a7a7a] dark:text-[#cccccc]">
                 Catat pemasukan atau pengeluaran pertamamu
@@ -487,6 +604,14 @@ export default function TransactionsPage() {
             ))
         )}
       </div>
+
+      <DateRangePickerSheet
+        open={isDateSheetOpen}
+        onOpenChange={setIsDateSheetOpen}
+        dateRange={dateRange}
+        onApply={handleApplyDateRange}
+        onResetToDefault={handleResetToDefault}
+      />
 
       <TransactionActionSheet
         open={!!actionTarget}

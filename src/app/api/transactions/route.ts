@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { transactions, accounts, categories } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, lte, or, type SQL } from "drizzle-orm";
 import { getUserId } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
 import { updateAccountBalance } from "@/lib/db/queries";
@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const searchParams = req.nextUrl.searchParams;
+  const startDate = searchParams.get("startDate");
+  const endDate = searchParams.get("endDate");
   const month = searchParams.get("month");
   const year = searchParams.get("year");
   const accountId = searchParams.get("accountId");
@@ -18,7 +20,52 @@ export async function GET(req: NextRequest) {
   const type = searchParams.get("type");
   const limit = searchParams.get("limit");
 
-  const data = await db
+  const conditions: (SQL<unknown> | undefined)[] = [eq(transactions.userId, userId)];
+
+  if (startDate) {
+    conditions.push(gte(transactions.date, startDate));
+  }
+  if (endDate) {
+    conditions.push(lte(transactions.date, endDate));
+  } else if (!startDate && month && year) {
+    const m = parseInt(month);
+    const y = parseInt(year);
+    const startStr = `${y}-${String(m).padStart(2, "0")}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const endStr = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    conditions.push(gte(transactions.date, startStr));
+    conditions.push(lte(transactions.date, endStr));
+  }
+
+  if (accountId && accountId !== "all") {
+    conditions.push(eq(transactions.accountId, parseInt(accountId)));
+  }
+
+  if (categoryId && categoryId !== "all") {
+    conditions.push(eq(transactions.categoryId, parseInt(categoryId)));
+  }
+
+  if (type && type !== "all") {
+    if (type === "transfer") {
+      conditions.push(
+        or(
+          eq(transactions.type, "transfer_out"),
+          eq(transactions.type, "transfer_in")
+        )
+      );
+    } else if (type === "adjustment") {
+      conditions.push(
+        or(
+          eq(transactions.type, "adjustment_in"),
+          eq(transactions.type, "adjustment_out")
+        )
+      );
+    } else {
+      conditions.push(eq(transactions.type, type as any));
+    }
+  }
+
+  let query = db
     .select({
       id: transactions.id,
       type: transactions.type,
@@ -41,44 +88,15 @@ export async function GET(req: NextRequest) {
     .from(transactions)
     .leftJoin(accounts, eq(transactions.accountId, accounts.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(eq(transactions.userId, userId))
+    .where(and(...conditions))
     .orderBy(desc(transactions.date), desc(transactions.createdAt));
 
-  // Filter in JS since we need dynamic conditions
-  let filtered = data;
-  if (month && year) {
-    const m = parseInt(month);
-    const y = parseInt(year);
-    filtered = filtered.filter((tx) => {
-      if (!tx.date) return false;
-      const d = new Date(tx.date);
-      return d.getMonth() + 1 === m && d.getFullYear() === y;
-    });
-  }
-  if (accountId) {
-    filtered = filtered.filter((tx) => tx.accountId === parseInt(accountId));
-  }
-  if (categoryId) {
-    filtered = filtered.filter((tx) => tx.categoryId === parseInt(categoryId));
-  }
-  if (type && type !== "all") {
-    if (type === "transfer") {
-      filtered = filtered.filter(
-        (tx) => tx.type === "transfer_out" || tx.type === "transfer_in"
-      );
-    } else if (type === "adjustment") {
-      filtered = filtered.filter(
-        (tx) => tx.type === "adjustment_in" || tx.type === "adjustment_out"
-      );
-    } else {
-      filtered = filtered.filter((tx) => tx.type === type);
-    }
-  }
   if (limit) {
-    filtered = filtered.slice(0, parseInt(limit));
+    query = query.limit(parseInt(limit)) as any;
   }
 
-  return NextResponse.json(filtered);
+  const data = await query;
+  return NextResponse.json(data);
 }
 
 export async function POST(req: NextRequest) {

@@ -57,7 +57,7 @@ export function ConfirmDialog({
           </Button>
           <Button
             variant={destructive ? "destructive" : "default"}
-            className="w-full sm:w-auto"
+            className="w-full sm:w-auto text-white dark:text-white font-medium"
             disabled={loading}
             onClick={() => {
               onOpenChange(false);
