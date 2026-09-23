@@ -188,6 +188,9 @@ export const subscriptions = pgTable(
   billingDay: integer("billing_day").notNull().default(1),
   status: subscriptionStatusEnum("status").notNull().default("active"),
   lastPaidAt: date("last_paid_at"),
+  nextDueDate: date("next_due_date"),
+  lastTransactionId: integer("last_transaction_id")
+    .references(() => transactions.id, { onDelete: "set null" }),
   notes: text("notes").default(""),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

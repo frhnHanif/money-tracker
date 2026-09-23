@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { name, price, interval, billingDay, status } = body;
+  const { name, price, interval, billingDay, status, lastPaidAt, nextDueDate } = body;
 
   if (!name || typeof price !== "number" || price <= 0) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -35,6 +35,14 @@ export async function POST(req: NextRequest) {
           ? billingDay
           : 1,
       status: status === "inactive" ? "inactive" : "active",
+      lastPaidAt:
+        lastPaidAt && typeof lastPaidAt === "string" && lastPaidAt.length === 10
+          ? lastPaidAt
+          : null,
+      nextDueDate:
+        nextDueDate && typeof nextDueDate === "string" && nextDueDate.length === 10
+          ? nextDueDate
+          : null,
     })
     .returning();
 

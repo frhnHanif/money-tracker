@@ -10,6 +10,9 @@ export interface SubscriptionLike {
   billingDay: number;
   status: "active" | "inactive";
   lastPaidAt: string | null;
+  nextDueDate?: string | null;
+  lastTransactionId?: number | null;
+  lastTransactionAccountId?: number | null;
   notes?: string | null;
   createdAt?: string | Date;
 }
@@ -24,15 +27,23 @@ function dayInMonth(year: number, month: number, day: number): Date {
 }
 
 /**
- * Next due date. If the subscription was ever paid, the cycle follows the
+ * Next due date. If an explicit nextDueDate was set, that is prioritized.
+ * Otherwise, if the subscription was ever paid, the cycle follows the
  * actual payment date (lastPaid + interval). Otherwise it falls back to the
  * billing day of the current (or next) month.
  */
 export function nextDue(sub: SubscriptionLike, refDate: Date = new Date()): Date {
+  if (sub.nextDueDate) {
+    return startOfDay(new Date(sub.nextDueDate));
+  }
   if (sub.lastPaidAt) {
     return addInterval(startOfDay(new Date(sub.lastPaidAt)), sub.interval);
   }
   const now = startOfDay(refDate);
+  if (sub.interval === "yearly") {
+    const baseDate = sub.createdAt ? startOfDay(new Date(sub.createdAt)) : now;
+    return addYears(baseDate, 1);
+  }
   const candidate = dayInMonth(now.getFullYear(), now.getMonth() + 1, sub.billingDay);
   return candidate < now ? addInterval(candidate, sub.interval) : candidate;
 }
@@ -47,6 +58,9 @@ export function isPaidThisCycle(sub: SubscriptionLike, refDate: Date = new Date(
   if (!sub.lastPaidAt) return false;
   const now = startOfDay(refDate);
   const due = nextDue(sub, refDate);
+  const days = Math.round((due.getTime() - now.getTime()) / 86400000);
+  // If the due date is within 3 days or already passed, it is due for the next cycle
+  if (days <= 3) return false;
   const lastPaid = startOfDay(new Date(sub.lastPaidAt));
   return lastPaid <= now && now < due;
 }
@@ -64,4 +78,4 @@ export function monthlyPrice(sub: SubscriptionLike): number {
 }
 
 export const formatInterval = (sub: SubscriptionLike) =>
-  sub.interval === "yearly" ? "tahunan" : "bulanan";
+  sub.interval === "yearly" ? "tahun" : "bulan";

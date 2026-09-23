@@ -115,8 +115,24 @@ export async function getSettlementsByDue(userId: string, dueId: number) {
 // Subscriptions
 export async function getSubscriptions(userId: string) {
   return db
-    .select()
+    .select({
+      id: subscriptions.id,
+      userId: subscriptions.userId,
+      name: subscriptions.name,
+      price: subscriptions.price,
+      interval: subscriptions.interval,
+      billingDay: subscriptions.billingDay,
+      status: subscriptions.status,
+      lastPaidAt: subscriptions.lastPaidAt,
+      nextDueDate: subscriptions.nextDueDate,
+      lastTransactionId: subscriptions.lastTransactionId,
+      lastTransactionAccountId: transactions.accountId,
+      notes: subscriptions.notes,
+      createdAt: subscriptions.createdAt,
+      updatedAt: subscriptions.updatedAt,
+    })
     .from(subscriptions)
+    .leftJoin(transactions, eq(subscriptions.lastTransactionId, transactions.id))
     .where(eq(subscriptions.userId, userId))
     .orderBy(asc(subscriptions.name));
 }

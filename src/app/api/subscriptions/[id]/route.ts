@@ -60,6 +60,18 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid date" }, { status: 400 });
     }
   }
+  if (body.nextDueDate !== undefined) {
+    if (body.nextDueDate === null) {
+      update.nextDueDate = null;
+    } else if (typeof body.nextDueDate === "string" && body.nextDueDate.length === 10) {
+      update.nextDueDate = body.nextDueDate;
+    } else {
+      return NextResponse.json({ error: "Invalid next due date" }, { status: 400 });
+    }
+  }
+  if (body.lastTransactionId !== undefined) {
+    update.lastTransactionId = body.lastTransactionId ? Number(body.lastTransactionId) : null;
+  }
 
   const [updated] = await db
     .update(subscriptions)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { transactions } from "@/lib/db/schema";
+import { transactions, subscriptions } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getUserId } from "@/lib/session";
 import { updateAccountBalance } from "@/lib/db/queries";
@@ -53,6 +53,10 @@ export async function DELETE(
   } else {
     await db.delete(transactions).where(eq(transactions.id, txId));
     await updateAccountBalance(userId, row.accountId);
+    await db
+      .update(subscriptions)
+      .set({ lastPaidAt: null, nextDueDate: null, lastTransactionId: null, updatedAt: new Date() })
+      .where(and(eq(subscriptions.lastTransactionId, txId), eq(subscriptions.userId, userId)));
   }
 
   return NextResponse.json({ success: true });

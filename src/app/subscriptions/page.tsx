@@ -2,13 +2,15 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, addDays, addMonths, addYears, isSameDay } from "date-fns";
+import { id } from "date-fns/locale";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, formatInputCurrency } from "@/lib/utils";
+import { formatCurrency, formatInputCurrency, cn } from "@/lib/utils";
 import {
   nextDue,
   isPaidThisCycle,
@@ -35,43 +37,54 @@ import {
 import {
   Repeat,
   Plus,
-  Pencil,
-  Trash2,
   CheckCircle2,
   AlertTriangle,
-  Play,
+  AlertCircle,
+  Clock,
   Pause,
+  Calendar as CalendarIcon,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { SubscriptionActionSheet } from "@/components/subscription-action-sheet";
+import { SubscriptionPaymentSheet } from "@/components/subscription-payment-sheet";
 
 interface AccountLike {
   id: number;
   name: string;
 }
 
-const fmtDate = (d: Date) => format(d, "dd MMM");
+const fmtDate = (d: Date) => {
+  const now = new Date();
+  if (d.getFullYear() !== now.getFullYear()) {
+    return format(d, "dd MMM yyyy");
+  }
+  return format(d, "dd MMM");
+};
 
 const dueLabel = (sub: SubscriptionLike) => {
   if (sub.status === "inactive") return null;
-  const paid = isPaidThisCycle(sub);
   const due = nextDue(sub);
   const days = daysUntil(sub);
-  if (paid) {
-    return {
-      tone: "paid" as const,
-      text: `✓ Dibayar ${fmtDate(new Date(sub.lastPaidAt!))} • Jatuh tempo ${fmtDate(due)}`,
-    };
-  }
   if (days < 0) {
     return {
       tone: "overdue" as const,
       text: `Lewat ${Math.abs(days)} hari — jatuh tempo ${fmtDate(due)}`,
     };
   }
-  if (days <= 7) {
+  if (days <= 3) {
     return {
       tone: "soon" as const,
-      text: `Jatuh tempo dalam ${days} hari (${fmtDate(due)})`,
+      text: days === 0
+        ? `Jatuh tempo hari ini (${fmtDate(due)})`
+        : `Jatuh tempo dalam ${days} hari (${fmtDate(due)})`,
+    };
+  }
+  const paid = isPaidThisCycle(sub);
+  if (paid) {
+    return {
+      tone: "paid" as const,
+      text: `✓ Dibayar ${fmtDate(new Date(sub.lastPaidAt!))} • Jatuh tempo ${fmtDate(due)}`,
     };
   }
   return {
@@ -80,12 +93,68 @@ const dueLabel = (sub: SubscriptionLike) => {
   };
 };
 
+const getStatusIcon = (sub: SubscriptionLike) => {
+  if (sub.status === "inactive") {
+    return (
+      <div
+        className="flex size-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
+        title="Nonaktif"
+      >
+        <Pause className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+  const days = daysUntil(sub);
+  if (days < 0) {
+    return (
+      <div
+        className="flex size-7 items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
+        title={`Lewat tempo ${Math.abs(days)} hari`}
+      >
+        <AlertCircle className="h-4 w-4" />
+      </div>
+    );
+  }
+  if (days <= 3) {
+    return (
+      <div
+        className="flex size-7 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
+        title={days === 0 ? "Jatuh tempo hari ini" : `Jatuh tempo dalam ${days} hari`}
+      >
+        <AlertTriangle className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
+  if (isPaidThisCycle(sub)) {
+    return (
+      <div
+        className="flex size-7 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
+        title="Sudah Dibayar"
+      >
+        <CheckCircle2 className="h-4 w-4" />
+      </div>
+    );
+  }
+  return (
+    <div
+      className="flex size-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
+      title="Belum jatuh tempo"
+    >
+      <Clock className="h-3.5 w-3.5" />
+    </div>
+  );
+};
+
 type Tab = "all" | "active" | "inactive";
 
 export default function SubscriptionsPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("all");
-  const [payTarget, setPayTarget] = useState<SubscriptionLike | null>(null);
+  const [selectedSub, setSelectedSub] = useState<SubscriptionLike | null>(null);
+  const [paymentSub, setPaymentSub] = useState<SubscriptionLike | null>(null);
+  const [paymentMode, setPaymentMode] = useState<"pay" | "update">("pay");
+  const [unpaySub, setUnpaySub] = useState<SubscriptionLike | null>(null);
+  const [unpaying, setUnpaying] = useState(false);
   const [editTarget, setEditTarget] = useState<SubscriptionLike | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SubscriptionLike | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -121,7 +190,7 @@ export default function SubscriptionsPage() {
   const dueSoon = activeSubs.filter((s) => {
     if (isPaidThisCycle(s)) return false;
     const d = daysUntil(s);
-    return d >= 0 && d <= 7;
+    return d >= 0 && d <= 3;
   }).length;
   const overdueCount = activeSubs.filter((s) => {
     if (isPaidThisCycle(s)) return false;
@@ -172,7 +241,7 @@ export default function SubscriptionsPage() {
               {dueSoon}
             </p>
             <p className="text-[10px] text-[#7a7a7a] dark:text-[#cccccc]">
-              minggu ini
+              ≤ 3 hari
             </p>
           </div>
           <div className="rounded-lg bg-red-50 p-3 text-center dark:bg-red-950/30">
@@ -237,109 +306,57 @@ export default function SubscriptionsPage() {
               return (
                 <div
                   key={sub.id}
-                  className="rounded-lg bg-white p-4 ring-1 ring-[#f0f0f0] dark:bg-[#272729] dark:ring-white/10"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedSub(sub)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedSub(sub);
+                    }
+                  }}
+                  className="flex items-center justify-between rounded-xl bg-white p-4 ring-1 ring-[#f0f0f0] transition-colors hover:bg-zinc-50/80 active:bg-zinc-100 cursor-pointer dark:bg-[#272729] dark:ring-white/10 dark:hover:bg-zinc-800/60 dark:active:bg-zinc-800"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-[15px] font-semibold text-[#1d1d1f] dark:text-white">
-                          {sub.name}
-                        </p>
-                        {sub.status === "active" ? (
-                          <Badge
-                            variant="secondary"
-                            className="shrink-0 px-1.5 py-0 text-[10px] leading-5 text-[#16a34a] dark:text-[#4ade80]"
-                          >
-                            Aktif
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="secondary"
-                            className="shrink-0 px-1.5 py-0 text-[10px] leading-5 text-[#7a7a7a] dark:text-[#cccccc]"
-                          >
-                            Nonaktif
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-                        {formatCurrency(sub.price)}/{formatInterval(sub)}
-                        {sub.interval === "yearly" &&
-                          ` • ${formatCurrency(Math.round(monthlyPrice(sub)))}/bln`}
+                  <div className="min-w-0 pr-3">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-[15px] font-semibold text-[#1d1d1f] dark:text-white">
+                        {sub.name}
                       </p>
-                      {label && (
-                        <p
-                          className={`mt-1 text-xs font-medium ${
-                            label.tone === "paid"
-                              ? "text-[#16a34a] dark:text-[#4ade80]"
-                              : label.tone === "overdue"
-                                ? "text-red-500 dark:text-red-400"
-                                : label.tone === "soon"
-                                  ? "text-[#b45309] dark:text-[#fbbf24]"
-                                  : "text-[#7a7a7a] dark:text-[#cccccc]"
-                          }`}
-                        >
-                          {label.tone === "overdue" ? (
-                            <AlertTriangle className="mr-0.5 inline h-3 w-3" />
-                          ) : label.tone === "paid" ? (
-                            <CheckCircle2 className="mr-0.5 inline h-3 w-3" />
-                          ) : null}
-                          {label.text}
-                        </p>
-                      )}
                       {sub.status === "inactive" && (
-                        <p className="mt-1 text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-                          Berhenti — aktifkan kembali kapan saja
-                        </p>
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0 px-1.5 py-0 text-[10px] leading-5 text-[#7a7a7a] dark:text-[#cccccc]"
+                        >
+                          Nonaktif
+                        </Badge>
                       )}
                     </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      {sub.status === "active" && (
-                        <Button
-                          size="sm"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => setPayTarget(sub)}
-                        >
-                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                          Tandai Dibayar
-                        </Button>
-                      )}
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          onClick={() => toggleStatus(sub)}
-                          aria-label={
-                            sub.status === "active"
-                              ? "Nonaktifkan"
-                              : "Aktifkan kembali"
-                          }
-                          title={
-                            sub.status === "active"
-                              ? "Nonaktifkan"
-                              : "Aktifkan kembali"
-                          }
-                          className="flex h-8 w-8 items-center justify-center rounded text-[#7a7a7a] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c] dark:hover:text-white"
-                        >
-                          {sub.status === "active" ? (
-                            <Pause className="h-4 w-4" />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => setEditTarget(sub)}
-                          aria-label="Edit langganan"
-                          className="flex h-8 w-8 items-center justify-center rounded text-[#7a7a7a] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c] dark:hover:text-white"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(sub)}
-                          aria-label="Hapus langganan"
-                          className="flex h-8 w-8 items-center justify-center rounded text-[#7a7a7a] hover:text-red-500 dark:text-[#cccccc] dark:hover:text-red-400"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
+                    <p className="mt-0.5 text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+                      {formatCurrency(sub.price)}/{formatInterval(sub)}
+                    </p>
+                    {label && (
+                      <p
+                        className={`mt-1 text-xs font-medium ${
+                          label.tone === "paid"
+                            ? "text-[#16a34a] dark:text-[#4ade80]"
+                            : label.tone === "overdue"
+                              ? "text-red-500 dark:text-red-400"
+                              : label.tone === "soon"
+                                ? "text-[#b45309] dark:text-[#fbbf24]"
+                                : "text-[#7a7a7a] dark:text-[#cccccc]"
+                        }`}
+                      >
+                        {label.text}
+                      </p>
+                    )}
+                    {sub.status === "inactive" && (
+                      <p className="mt-1 text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+                        Berhenti — klik untuk opsi
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 flex items-center">
+                    {getStatusIcon(sub)}
                   </div>
                 </div>
               );
@@ -356,18 +373,61 @@ export default function SubscriptionsPage() {
         )}
       </div>
 
-      {payTarget && (
-        <PayDialog
-          sub={payTarget}
+      {/* iOS Style Action Sheet for Subscription Options */}
+      {selectedSub && (
+        <SubscriptionActionSheet
+          open={!!selectedSub}
+          onOpenChange={(open) => {
+            if (!open) setSelectedSub(null);
+          }}
+          sub={selectedSub}
+          onSelectPay={(sub) => {
+            setSelectedSub(null);
+            setPaymentSub(sub);
+            setPaymentMode("pay");
+          }}
+          onSelectUpdatePay={(sub) => {
+            setSelectedSub(null);
+            setPaymentSub(sub);
+            setPaymentMode("update");
+          }}
+          onSelectUnpay={(sub) => {
+            setSelectedSub(null);
+            setUnpaySub(sub);
+          }}
+          onToggleStatus={(sub) => {
+            setSelectedSub(null);
+            toggleStatus(sub);
+          }}
+          onEdit={(sub) => {
+            setSelectedSub(null);
+            setEditTarget(sub);
+          }}
+          onDelete={(sub) => {
+            setSelectedSub(null);
+            setDeleteTarget(sub);
+          }}
+        />
+      )}
+
+      {/* Payment / Update Payment Sheet */}
+      {paymentSub && (
+        <SubscriptionPaymentSheet
+          open={!!paymentSub}
+          onOpenChange={(open) => {
+            if (!open) setPaymentSub(null);
+          }}
+          sub={paymentSub}
           accounts={accounts}
-          onClose={() => setPayTarget(null)}
-          onDone={() => {
-            setPayTarget(null);
+          mode={paymentMode}
+          onSuccess={() => {
+            setPaymentSub(null);
             invalidateAll();
           }}
         />
       )}
 
+      {/* Edit Subscription Dialog */}
       {editTarget && (
         <EditDialog
           sub={editTarget}
@@ -379,6 +439,7 @@ export default function SubscriptionsPage() {
         />
       )}
 
+      {/* Add Subscription Dialog */}
       <AddDialog
         open={addOpen}
         onOpenChange={setAddOpen}
@@ -388,6 +449,39 @@ export default function SubscriptionsPage() {
         }}
       />
 
+      {/* Confirm Unpay Dialog */}
+      <ConfirmDialog
+        open={!!unpaySub}
+        onOpenChange={(open) => {
+          if (!open) setUnpaySub(null);
+        }}
+        title={`Batalkan pembayaran ${unpaySub?.name}?`}
+        description="Status langganan akan dikembalikan ke belum dibayar dan transaksi pembayaran terkait akan dihapus (saldo akun dipulihkan)."
+        confirmLabel={unpaying ? "Membatalkan..." : "Batalkan Pembayaran"}
+        loading={unpaying}
+        onConfirm={async () => {
+          if (!unpaySub) return;
+          setUnpaying(true);
+          try {
+            const res = await fetch(`/api/subscriptions/${unpaySub.id}/unpay`, {
+              method: "POST",
+            });
+            if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.error || "Gagal membatalkan pembayaran");
+            }
+            toast.success(`Pembayaran ${unpaySub.name} berhasil dibatalkan`);
+            setUnpaySub(null);
+            invalidateAll();
+          } catch (err: any) {
+            toast.error(err.message || "Gagal membatalkan pembayaran");
+          } finally {
+            setUnpaying(false);
+          }
+        }}
+      />
+
+      {/* Confirm Delete Dialog */}
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
@@ -410,133 +504,6 @@ export default function SubscriptionsPage() {
   );
 }
 
-/* ---------- Pay dialog (creates expense transaction + marks paid) ---------- */
-function PayDialog({
-  sub,
-  accounts,
-  onClose,
-  onDone,
-}: {
-  sub: SubscriptionLike;
-  accounts: AccountLike[];
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [accountId, setAccountId] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    if (!accountId || !date) return;
-    setLoading(true);
-    try {
-      // Get or create the "Langganan" category
-      const cats = await fetch("/api/categories").then((r) => r.json());
-      let catId: number | null = null;
-      const found = (cats as any[]).find(
-        (c) => c.name.toLowerCase() === "langganan"
-      );
-      if (found) {
-        catId = found.id;
-      } else {
-        const created = await fetch("/api/categories", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: "Langganan",
-            type: "expense",
-            color: "#8b5cf6",
-          }),
-        }).then((r) => r.json());
-        catId = created?.id ?? null;
-      }
-
-      const res = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "expense",
-          amount: sub.price,
-          accountId: parseInt(accountId),
-          categoryId: catId,
-          description: sub.name,
-          notes: `Pembayaran ${sub.name}`,
-          date,
-        }),
-      });
-      if (!res.ok) throw new Error("Gagal simpan transaksi");
-
-      const patchRes = await fetch(`/api/subscriptions/${sub.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lastPaidAt: date }),
-      });
-      if (!patchRes.ok) throw new Error("Gagal update status");
-
-      toast.success(`${sub.name} dibayar & tercatat`);
-      onDone();
-    } catch {
-      toast.error("Gagal menyimpan pembayaran");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="text-base">
-            Tandai Dibayar — {sub.name}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="rounded-lg bg-[#f5f5f7] p-3 dark:bg-[#2a2a2c]">
-            <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-              Nominal {formatCurrency(sub.price)}/{formatInterval(sub)}
-            </p>
-            <p className="mt-0.5 text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-              Transaksi pengeluaran akan dibuat otomatis
-            </p>
-          </div>
-          <div>
-            <Label>Akun pembayaran</Label>
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih akun" />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map((a) => (
-                  <SelectItem key={a.id} value={String(a.id)}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Tanggal bayar</Label>
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={submit}
-              disabled={loading || !accountId}
-              className="w-full"
-            >
-              {loading ? "Menyimpan..." : "Simpan & Catat Pembayaran"}
-            </Button>
-          </DialogFooter>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 /* ---------- Edit dialog ---------- */
 function EditDialog({
   sub,
@@ -550,12 +517,43 @@ function EditDialog({
   const [name, setName] = useState(sub.name);
   const [price, setPrice] = useState(String(sub.price));
   const [interval, setInterval] = useState(sub.interval);
-  const [billingDay, setBillingDay] = useState(String(sub.billingDay));
+  const [dueDate, setDueDate] = useState<Date>(() => nextDue(sub));
+  const [isDueDateExpanded, setIsDueDateExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const handleIntervalChange = (newInterval: "monthly" | "yearly") => {
+    setInterval(newInterval);
+    if (newInterval === "yearly") {
+      setDueDate(addYears(new Date(), 1));
+    } else {
+      setDueDate(addMonths(new Date(), 1));
+    }
+  };
+
+  const handleShortcut28 = () => {
+    setDueDate(addDays(new Date(), 28));
+    setIsDueDateExpanded(false);
+  };
+  const handleShortcut30 = () => {
+    setDueDate(addDays(new Date(), 30));
+    setIsDueDateExpanded(false);
+  };
+  const handleShortcut1Month = () => {
+    setDueDate(addMonths(new Date(), 1));
+    setIsDueDateExpanded(false);
+  };
+  const handleShortcut1Year = () => {
+    setDueDate(addYears(new Date(), 1));
+    setIsDueDateExpanded(false);
+  };
+
+  const isShortcut28 = isSameDay(dueDate, addDays(new Date(), 28));
+  const isShortcut30 = isSameDay(dueDate, addDays(new Date(), 30));
+  const isShortcut1Month = isSameDay(dueDate, addMonths(new Date(), 1));
+  const isShortcut1Year = isSameDay(dueDate, addYears(new Date(), 1));
 
   const submit = async () => {
     const amt = parseInt(price.replace(/\D/g, ""), 10);
-    const day = parseInt(billingDay, 10);
     if (!amt || amt <= 0 || !name.trim()) return;
     setLoading(true);
     try {
@@ -566,7 +564,8 @@ function EditDialog({
           name: name.trim(),
           price: amt,
           interval,
-          billingDay: day >= 1 && day <= 31 ? day : 1,
+          billingDay: dueDate.getDate(),
+          nextDueDate: format(dueDate, "yyyy-MM-dd"),
         }),
       });
       if (!res.ok) throw new Error("Gagal");
@@ -581,28 +580,35 @@ function EditDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-h-[90vh] overflow-y-auto max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-base">Edit Langganan</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-3.5 pt-1">
           <div>
-            <Label>Nama</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+            <Label className="text-xs">Nama</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1"
+            />
           </div>
+
           <div>
-            <Label>Harga</Label>
+            <Label className="text-xs">Harga</Label>
             <Input
               type="text"
               inputMode="numeric"
               value={price}
               onChange={(e) => setPrice(formatInputCurrency(e.target.value))}
+              className="mt-1"
             />
           </div>
+
           <div>
-            <Label>Interval</Label>
-            <Select value={interval} onValueChange={(v) => setInterval(v as "monthly" | "yearly")}>
-              <SelectTrigger>
+            <Label className="text-xs">Interval</Label>
+            <Select value={interval} onValueChange={(v) => handleIntervalChange(v as "monthly" | "yearly")}>
+              <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -611,17 +617,97 @@ function EditDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Tanggal Jatuh Tempo */}
           <div>
-            <Label>Tanggal tagihan (1-31)</Label>
-            <Input
-              type="number"
-              min={1}
-              max={31}
-              value={billingDay}
-              onChange={(e) => setBillingDay(e.target.value)}
-            />
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Tanggal Jatuh Tempo</Label>
+              <span className="text-[11px] text-[#7a7a7a] dark:text-[#cccccc]">
+                Tagihan ke-{dueDate.getDate()}
+              </span>
+            </div>
+
+            {/* Shortcut Chips */}
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={handleShortcut28}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  isShortcut28
+                    ? "bg-[#0066cc] text-white dark:bg-[#2997ff]"
+                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebee] dark:bg-[#2a2a2c] dark:text-white dark:hover:bg-[#343438]"
+                )}
+              >
+                +28 Hari
+              </button>
+              <button
+                type="button"
+                onClick={handleShortcut30}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  isShortcut30
+                    ? "bg-[#0066cc] text-white dark:bg-[#2997ff]"
+                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebee] dark:bg-[#2a2a2c] dark:text-white dark:hover:bg-[#343438]"
+                )}
+              >
+                +30 Hari
+              </button>
+              <button
+                type="button"
+                onClick={handleShortcut1Month}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  isShortcut1Month
+                    ? "bg-[#0066cc] text-white dark:bg-[#2997ff]"
+                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebee] dark:bg-[#2a2a2c] dark:text-white dark:hover:bg-[#343438]"
+                )}
+              >
+                +1 Bulan
+              </button>
+              <button
+                type="button"
+                onClick={handleShortcut1Year}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  isShortcut1Year
+                    ? "bg-[#0066cc] text-white dark:bg-[#2997ff]"
+                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebee] dark:bg-[#2a2a2c] dark:text-white dark:hover:bg-[#343438]"
+                )}
+              >
+                +1 Tahun
+              </button>
+            </div>
+
+            {/* Date button + calendar */}
+            <button
+              type="button"
+              onClick={() => setIsDueDateExpanded(!isDueDateExpanded)}
+              className="mt-2 flex h-10 w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-[#1d1d1f] transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-[#1c1c1e] dark:text-white dark:hover:bg-zinc-800"
+            >
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-3.5 w-3.5 text-[#7a7a7a] dark:text-[#cccccc]" />
+                <span>{format(dueDate, "d MMMM yyyy", { locale: id })}</span>
+              </div>
+              <ChevronDown className={cn("h-3.5 w-3.5 text-[#7a7a7a] transition-transform", isDueDateExpanded && "rotate-180")} />
+            </button>
+            {isDueDateExpanded && (
+              <div className="mt-2 flex justify-center rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[#1c1c1e]">
+                <Calendar
+                  mode="single"
+                  selected={dueDate}
+                  onSelect={(d) => {
+                    if (d) {
+                      setDueDate(d);
+                      setIsDueDateExpanded(false);
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="pt-2">
             <Button
               onClick={submit}
               disabled={loading || !name.trim() || !price}
@@ -649,12 +735,81 @@ function AddDialog({
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
-  const [billingDay, setBillingDay] = useState(String(new Date().getDate()));
+  const [isPaid, setIsPaid] = useState(false);
+  const [payDate, setPayDate] = useState<Date>(new Date());
+  const [dueDate, setDueDate] = useState<Date>(() => addMonths(new Date(), 1));
+  const [isPayDateExpanded, setIsPayDateExpanded] = useState(false);
+  const [isDueDateExpanded, setIsDueDateExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Update dueDate when interval, isPaid, or payDate changes
+  const handleIntervalChange = (newInterval: "monthly" | "yearly") => {
+    setInterval(newInterval);
+    const base = isPaid ? payDate : new Date();
+    if (newInterval === "yearly") {
+      setDueDate(addYears(base, 1));
+    } else {
+      setDueDate(addMonths(base, 1));
+    }
+  };
+
+  const handleIsPaidChange = (paid: boolean) => {
+    setIsPaid(paid);
+    const base = paid ? payDate : new Date();
+    if (interval === "yearly") {
+      setDueDate(addYears(base, 1));
+    } else {
+      setDueDate(addMonths(base, 1));
+    }
+  };
+
+  const handlePayDateChange = (date: Date) => {
+    setPayDate(date);
+    if (interval === "yearly") {
+      setDueDate(addYears(date, 1));
+    } else {
+      setDueDate(addMonths(date, 1));
+    }
+    setIsPayDateExpanded(false);
+  };
+
+  // Shortcuts
+  const baseForShortcut = isPaid ? payDate : new Date();
+  const handleShortcut28 = () => {
+    setDueDate(addDays(baseForShortcut, 28));
+    setIsDueDateExpanded(false);
+  };
+  const handleShortcut30 = () => {
+    setDueDate(addDays(baseForShortcut, 30));
+    setIsDueDateExpanded(false);
+  };
+  const handleShortcut1Month = () => {
+    setDueDate(addMonths(baseForShortcut, 1));
+    setIsDueDateExpanded(false);
+  };
+  const handleShortcut1Year = () => {
+    setDueDate(addYears(baseForShortcut, 1));
+    setIsDueDateExpanded(false);
+  };
+
+  const isShortcut28 = isSameDay(dueDate, addDays(baseForShortcut, 28));
+  const isShortcut30 = isSameDay(dueDate, addDays(baseForShortcut, 30));
+  const isShortcut1Month = isSameDay(dueDate, addMonths(baseForShortcut, 1));
+  const isShortcut1Year = isSameDay(dueDate, addYears(baseForShortcut, 1));
+
+  const resetForm = () => {
+    setName("");
+    setPrice("");
+    setInterval("monthly");
+    setIsPaid(false);
+    setPayDate(new Date());
+    setDueDate(addMonths(new Date(), 1));
+    setIsPayDateExpanded(false);
+    setIsDueDateExpanded(false);
+  };
 
   const submit = async () => {
     const amt = parseInt(price.replace(/\D/g, ""), 10);
-    const day = parseInt(billingDay, 10);
     if (!amt || amt <= 0 || !name.trim()) return;
     setLoading(true);
     try {
@@ -665,13 +820,15 @@ function AddDialog({
           name: name.trim(),
           price: amt,
           interval,
-          billingDay: day >= 1 && day <= 31 ? day : 1,
+          billingDay: dueDate.getDate(),
+          status: "active",
+          lastPaidAt: isPaid ? format(payDate, "yyyy-MM-dd") : null,
+          nextDueDate: format(dueDate, "yyyy-MM-dd"),
         }),
       });
       if (!res.ok) throw new Error("Gagal");
       toast.success("Langganan ditambahkan");
-      setName("");
-      setPrice("");
+      resetForm();
       onDone();
     } catch {
       toast.error("Gagal menyimpan");
@@ -681,34 +838,44 @@ function AddDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) resetForm();
+        onOpenChange(o);
+      }}
+    >
+      <DialogContent className="max-h-[90vh] overflow-y-auto max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-base">Tambah Langganan</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-3.5 pt-1">
           <div>
-            <Label>Nama layanan</Label>
+            <Label className="text-xs">Nama layanan</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Contoh: Spotify, Netflix, Canva..."
+              className="mt-1"
             />
           </div>
+
           <div>
-            <Label>Harga</Label>
+            <Label className="text-xs">Harga</Label>
             <Input
               type="text"
               inputMode="numeric"
               value={price}
               onChange={(e) => setPrice(formatInputCurrency(e.target.value))}
               placeholder="Rp0"
+              className="mt-1"
             />
           </div>
+
           <div>
-            <Label>Interval</Label>
-            <Select value={interval} onValueChange={(v) => setInterval(v as "monthly" | "yearly")}>
-              <SelectTrigger>
+            <Label className="text-xs">Interval</Label>
+            <Select value={interval} onValueChange={(v) => handleIntervalChange(v as "monthly" | "yearly")}>
+              <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -717,23 +884,167 @@ function AddDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Status Pembayaran */}
           <div>
-            <Label>Tanggal tagihan (1-31)</Label>
-            <Input
-              type="number"
-              min={1}
-              max={31}
-              value={billingDay}
-              onChange={(e) => setBillingDay(e.target.value)}
-            />
+            <Label className="text-xs">Status Pembayaran</Label>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleIsPaidChange(true)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors",
+                  isPaid
+                    ? "border-[#16a34a] bg-[#16a34a]/10 text-[#16a34a] dark:border-[#4ade80] dark:bg-[#4ade80]/15 dark:text-[#4ade80]"
+                    : "border-zinc-200 bg-transparent text-[#7a7a7a] hover:bg-zinc-50 dark:border-white/10 dark:text-[#cccccc] dark:hover:bg-zinc-800"
+                )}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Sudah Dibayar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleIsPaidChange(false)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors",
+                  !isPaid
+                    ? "border-[#b45309] bg-[#f59e0b]/10 text-[#b45309] dark:border-[#fbbf24] dark:bg-[#fbbf24]/15 dark:text-[#fbbf24]"
+                    : "border-zinc-200 bg-transparent text-[#7a7a7a] hover:bg-zinc-50 dark:border-white/10 dark:text-[#cccccc] dark:hover:bg-zinc-800"
+                )}
+              >
+                <Clock className="h-3.5 w-3.5" />
+                Belum Dibayar
+              </button>
+            </div>
           </div>
-          <DialogFooter>
+
+          {/* Tanggal Bayar (jika sudah dibayar) */}
+          {isPaid && (
+            <div>
+              <Label className="text-xs">Tanggal Terakhir Bayar</Label>
+              <button
+                type="button"
+                onClick={() => setIsPayDateExpanded(!isPayDateExpanded)}
+                className="mt-1 flex h-10 w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-[#1d1d1f] transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-[#1c1c1e] dark:text-white dark:hover:bg-zinc-800"
+              >
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="h-3.5 w-3.5 text-[#7a7a7a] dark:text-[#cccccc]" />
+                  <span>{format(payDate, "d MMMM yyyy", { locale: id })}</span>
+                </div>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-[#7a7a7a] transition-transform", isPayDateExpanded && "rotate-180")} />
+              </button>
+              {isPayDateExpanded && (
+                <div className="mt-2 flex justify-center rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[#1c1c1e]">
+                  <Calendar
+                    mode="single"
+                    selected={payDate}
+                    onSelect={(d) => d && handlePayDateChange(d)}
+                    />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tanggal Jatuh Tempo */}
+          <div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Tanggal Jatuh Tempo</Label>
+              <span className="text-[11px] text-[#7a7a7a] dark:text-[#cccccc]">
+                Tagihan ke-{dueDate.getDate()}
+              </span>
+            </div>
+
+            {/* Shortcut Chips */}
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={handleShortcut28}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  isShortcut28
+                    ? "bg-[#0066cc] text-white dark:bg-[#2997ff]"
+                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebee] dark:bg-[#2a2a2c] dark:text-white dark:hover:bg-[#343438]"
+                )}
+              >
+                +28 Hari
+              </button>
+              <button
+                type="button"
+                onClick={handleShortcut30}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  isShortcut30
+                    ? "bg-[#0066cc] text-white dark:bg-[#2997ff]"
+                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebee] dark:bg-[#2a2a2c] dark:text-white dark:hover:bg-[#343438]"
+                )}
+              >
+                +30 Hari
+              </button>
+              <button
+                type="button"
+                onClick={handleShortcut1Month}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  isShortcut1Month
+                    ? "bg-[#0066cc] text-white dark:bg-[#2997ff]"
+                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebee] dark:bg-[#2a2a2c] dark:text-white dark:hover:bg-[#343438]"
+                )}
+              >
+                +1 Bulan
+              </button>
+              <button
+                type="button"
+                onClick={handleShortcut1Year}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  isShortcut1Year
+                    ? "bg-[#0066cc] text-white dark:bg-[#2997ff]"
+                    : "bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#ebebee] dark:bg-[#2a2a2c] dark:text-white dark:hover:bg-[#343438]"
+                )}
+              >
+                +1 Tahun
+              </button>
+            </div>
+
+            {/* Date button + calendar */}
+            <button
+              type="button"
+              onClick={() => setIsDueDateExpanded(!isDueDateExpanded)}
+              className="mt-2 flex h-10 w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-[#1d1d1f] transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-[#1c1c1e] dark:text-white dark:hover:bg-zinc-800"
+            >
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-3.5 w-3.5 text-[#7a7a7a] dark:text-[#cccccc]" />
+                <span>{format(dueDate, "d MMMM yyyy", { locale: id })}</span>
+              </div>
+              <ChevronDown className={cn("h-3.5 w-3.5 text-[#7a7a7a] transition-transform", isDueDateExpanded && "rotate-180")} />
+            </button>
+            {isDueDateExpanded && (
+              <div className="mt-2 flex justify-center rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[#1c1c1e]">
+                <Calendar
+                  mode="single"
+                  selected={dueDate}
+                  onSelect={(d) => {
+                    if (d) {
+                      setDueDate(d);
+                      setIsDueDateExpanded(false);
+                    }
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          <p className="text-[11px] text-[#7a7a7a] dark:text-[#cccccc]">
+            Status dan tagihan langsung aktif tanpa membuat transaksi keuangan di masa lalu.
+          </p>
+
+          <DialogFooter className="pt-2">
             <Button
               onClick={submit}
               disabled={loading || !name.trim() || !price}
               className="w-full"
             >
-              {loading ? "Menyimpan..." : "Simpan"}
+              {loading ? "Menyimpan..." : "Simpan Langganan"}
             </Button>
           </DialogFooter>
         </div>
