@@ -14,7 +14,7 @@ export async function POST(
   const { id } = await params;
   const dueId = parseInt(id);
   const body = await req.json();
-  const { amount, transactionId } = body;
+  const { amount, transactionId, forgiveRemaining } = body;
 
   if (typeof amount !== "number" || amount <= 0 || !transactionId) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -40,7 +40,8 @@ export async function POST(
     .where(eq(settlements.dueId, dueId));
 
   const settledSum = Number(sum[0]?.total) || 0;
-  const newStatus = settledSum >= existing[0].amount ? "settled" : "open";
+  const newStatus =
+    Boolean(forgiveRemaining) || settledSum >= existing[0].amount ? "settled" : "open";
 
   const [updated] = await db
     .update(dues)

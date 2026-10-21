@@ -15,8 +15,11 @@ import {
   Bell,
   LogOut,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { usePinLock } from "@/contexts/pin-lock-context";
+import { PinSettingsDialog } from "@/components/pin-settings-dialog";
 
 function Section({
   label,
@@ -180,12 +183,52 @@ function ProfileRow() {
   );
 }
 
+function PinRow({ onClick }: { onClick: () => void }) {
+  const { pinEnabled } = usePinLock();
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#f5f5f7] dark:hover:bg-[#2a2a2c]"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#16a34a]/18">
+        <Lock className="h-4 w-4 text-[#16a34a]" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-medium text-[#1d1d1f] dark:text-white">
+          Kunci PIN Aplikasi
+        </p>
+        <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+          {pinEnabled ? "Aktif saat buka aplikasi" : "Nonaktif"}
+        </p>
+      </div>
+      <span
+        className={`mr-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+          pinEnabled
+            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+            : "bg-[#f0f0f0] text-[#7a7a7a] dark:bg-[#3a3a3c] dark:text-[#cccccc]"
+        }`}
+      >
+        {pinEnabled ? "Aktif" : "Mati"}
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-[#7a7a7a] dark:text-[#cccccc]" />
+    </button>
+  );
+}
+
 export default function SettingsPage() {
+  const [pinDialogOpen, setPinDialogOpen] = useState(false);
+
   return (
     <AppShell>
       <div className="space-y-6 pb-4">
         <Section label="Profil">
           <ProfileRow />
+        </Section>
+
+        <Section label="Keamanan">
+          <PinRow onClick={() => setPinDialogOpen(true)} />
         </Section>
 
         <Section label="Keuangan">
@@ -213,6 +256,11 @@ export default function SettingsPage() {
           </button>
         </Section>
       </div>
+
+      <PinSettingsDialog
+        open={pinDialogOpen}
+        onOpenChange={setPinDialogOpen}
+      />
     </AppShell>
   );
 }

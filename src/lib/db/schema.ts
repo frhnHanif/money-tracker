@@ -40,6 +40,8 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 100 }).notNull(),
   passwordHash: text("password_hash").notNull(),
   image: text("image"),
+  pinHash: text("pin_hash"),
+  pinEnabled: boolean("pin_enabled").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

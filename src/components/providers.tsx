@@ -5,6 +5,7 @@ import { SessionProvider } from "next-auth/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { BalanceVisibilityProvider } from "@/contexts/balance-visibility-context";
+import { PinLockProvider } from "@/contexts/pin-lock-context";
 
 function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
@@ -13,8 +14,10 @@ function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
         <BalanceVisibilityProvider>
-          {children}
-          <Toaster position="top-center" richColors />
+          <PinLockProvider>
+            {children}
+            <Toaster position="top-center" richColors />
+          </PinLockProvider>
         </BalanceVisibilityProvider>
       </QueryClientProvider>
     </SessionProvider>

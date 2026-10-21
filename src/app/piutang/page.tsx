@@ -24,7 +24,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency, formatInputCurrency } from "@/lib/utils";
-import { dueRemaining, type DueItem, type DueDirection } from "@/lib/dues";
+import {
+  dueRemaining,
+  isDueSettled,
+  isDueForgiven,
+  type DueItem,
+  type DueDirection,
+} from "@/lib/dues";
 import {
   HandCoins,
   Wallet,
@@ -33,6 +39,7 @@ import {
   Trash2,
   CheckCircle2,
   Handshake,
+  HeartHandshake,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -215,7 +222,9 @@ export default function PiutangPage() {
                 <div className="overflow-hidden rounded-lg ring-1 ring-[#f0f0f0] dark:ring-white/10">
                   {g.items.map((d) => {
                     const rem = remaining(d);
-                    const settled = rem <= 0;
+                    const settled = isDueSettled(d);
+                    const forgiven = isDueForgiven(d);
+                    const settledSum = d.settledSum || 0;
                     return (
                       <div
                         key={d.id}
@@ -229,13 +238,33 @@ export default function PiutangPage() {
                               {d.title || "Tagihan"}
                             </p>
                             {settled ? (
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 px-1.5 py-0 text-[10px] leading-5 text-[#16a34a] dark:text-[#4ade80]"
-                              >
-                                <CheckCircle2 className="mr-0.5 h-3 w-3" />
-                                Lunas
-                              </Badge>
+                              forgiven ? (
+                                settledSum === 0 ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className="shrink-0 px-1.5 py-0 text-[10px] leading-5 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
+                                  >
+                                    <HeartHandshake className="mr-0.5 h-3 w-3" />
+                                    Diikhlaskan
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant="secondary"
+                                    className="shrink-0 px-1.5 py-0 text-[10px] leading-5 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
+                                  >
+                                    <HeartHandshake className="mr-0.5 h-3 w-3" />
+                                    Lunas (Diikhlaskan)
+                                  </Badge>
+                                )
+                              ) : (
+                                <Badge
+                                  variant="secondary"
+                                  className="shrink-0 px-1.5 py-0 text-[10px] leading-5 text-[#16a34a] dark:text-[#4ade80]"
+                                >
+                                  <CheckCircle2 className="mr-0.5 h-3 w-3" />
+                                  Lunas
+                                </Badge>
+                              )
                             ) : (
                               <Badge
                                 variant="secondary"
@@ -247,7 +276,17 @@ export default function PiutangPage() {
                           </div>
                           <p className="mt-0.5 text-xs text-[#7a7a7a] dark:text-[#cccccc]">
                             {format(d.createdAt ? new Date(d.createdAt) : new Date(), "dd MMM yyyy")} •{" "}
-                            {formatCurrency(d.amount)}
+                            {settled && forgiven ? (
+                              settledSum === 0 ? (
+                                <span>{formatCurrency(d.amount)} (Diikhlaskan)</span>
+                              ) : (
+                                <span>
+                                  Dibayar {formatCurrency(settledSum)} • Ikhlas {formatCurrency(d.amount - settledSum)}
+                                </span>
+                              )
+                            ) : (
+                              formatCurrency(d.amount)
+                            )}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
@@ -314,7 +353,7 @@ export default function PiutangPage() {
           onClose={() => setEditTarget(null)}
           onDone={() => {
             setEditTarget(null);
-            queryClient.invalidateQueries({ queryKey: ["dues"] });
+            invalidateAll();
           }}
         />
       )}
@@ -370,7 +409,35 @@ function SettleDialog({
   const [amount, setAmount] = useState(String(defaultAmount));
   const [accountId, setAccountId] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [forgiveRemaining, setForgiveRemaining] = useState(false);
+  const [showForgiveConfirm, setShowForgiveConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const parsedAmt = parseInt(amount.replace(/\D/g, ""), 10) || 0;
+  const isPartial = parsedAmt > 0 && parsedAmt < defaultAmount;
+  const remainingAfter = Math.max(0, defaultAmount - parsedAmt);
+
+  const forgiveDirect = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/dues/${due.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "settled" }),
+      });
+      if (!res.ok) throw new Error("Gagal mengikhlaskan");
+      toast.success(
+        due.direction === "receivable"
+          ? "Piutang diikhlaskan (dianggap lunas)"
+          : "Tagihan ditandai lunas"
+      );
+      onDone();
+    } catch {
+      toast.error("Gagal mengikhlaskan tagihan");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const submit = async () => {
     const amt = parseInt(amount.replace(/\D/g, ""), 10);
@@ -399,11 +466,19 @@ function SettleDialog({
       const settleRes = await fetch(`/api/dues/${due.id}/settle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amt, transactionId: tx.id }),
+        body: JSON.stringify({
+          amount: amt,
+          transactionId: tx.id,
+          forgiveRemaining: isPartial && forgiveRemaining,
+        }),
       });
       if (!settleRes.ok) throw new Error("Gagal menautkan pelunasan");
 
-      toast.success("Transaksi & pelunasan tersimpan");
+      toast.success(
+        isPartial && forgiveRemaining
+          ? "Pelunasan tersimpan & sisa tagihan diikhlaskan"
+          : "Transaksi & pelunasan tersimpan"
+      );
       onDone();
     } catch {
       toast.error("Gagal menyimpan pelunasan");
@@ -420,49 +495,128 @@ function SettleDialog({
             {due.direction === "receivable" ? "Catat Pelunasan" : "Bayar Utang"}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
-          <div className="rounded-lg bg-[#f5f5f7] p-3 dark:bg-[#2a2a2c]">
-            <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
-              {due.person} — {due.title || "Tagihan"}
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-[#1d1d1f] dark:text-white">
-              Sisa {formatCurrency(defaultAmount)} dari {formatCurrency(due.amount)}
-            </p>
+
+        {showForgiveConfirm ? (
+          <div className="space-y-4 py-2">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
+              <HeartHandshake className="size-6" />
+            </div>
+            <div className="space-y-1 text-center">
+              <p className="text-base font-semibold text-[#1d1d1f] dark:text-white">
+                {due.direction === "receivable"
+                  ? "Ikhlaskan Piutang Ini?"
+                  : "Tandai Lunas?"}
+              </p>
+              <p className="px-2 text-xs leading-relaxed text-[#7a7a7a] dark:text-[#cccccc]">
+                {due.direction === "receivable" ? (
+                  <>
+                    Sisa piutang sebesar{" "}
+                    <span className="font-semibold text-[#1d1d1f] dark:text-white">
+                      {formatCurrency(defaultAmount)}
+                    </span>{" "}
+                    dari{" "}
+                    <span className="font-semibold text-[#1d1d1f] dark:text-white">
+                      {due.person}
+                    </span>{" "}
+                    akan dianggap lunas tanpa mencatat uang masuk ke rekening.
+                  </>
+                ) : (
+                  <>
+                    Sisa utang sebesar{" "}
+                    <span className="font-semibold text-[#1d1d1f] dark:text-white">
+                      {formatCurrency(defaultAmount)}
+                    </span>{" "}
+                    kepada{" "}
+                    <span className="font-semibold text-[#1d1d1f] dark:text-white">
+                      {due.person}
+                    </span>{" "}
+                    akan ditandai lunas tanpa memotong saldo akun.
+                  </>
+                )}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowForgiveConfirm(false)}
+                disabled={loading}
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                onClick={forgiveDirect}
+                disabled={loading}
+                className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+              >
+                {loading ? "Menyimpan..." : "Ya, Ikhlaskan"}
+              </Button>
+            </div>
           </div>
-          <div>
-            <Label>Nominal dibayar</Label>
-            <Input
-              type="text"
-              inputMode="numeric"
-              value={amount}
-              onChange={(e) => setAmount(formatInputCurrency(e.target.value))}
-              className="h-12 text-center text-lg font-semibold"
-            />
-          </div>
-          <div>
-            <Label>Akun</Label>
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih akun" />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map((a) => (
-                  <SelectItem key={a.id} value={String(a.id)}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Tanggal</Label>
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-[#f5f5f7] p-3 dark:bg-[#2a2a2c]">
+              <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+                {due.person} — {due.title || "Tagihan"}
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-[#1d1d1f] dark:text-white">
+                Sisa {formatCurrency(defaultAmount)} dari{" "}
+                {formatCurrency(due.amount)}
+              </p>
+            </div>
+            <div>
+              <Label>Nominal dibayar</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={amount}
+                onChange={(e) => setAmount(formatInputCurrency(e.target.value))}
+                className="h-12 text-center text-lg font-semibold"
+              />
+            </div>
+
+            {isPartial && (
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 text-xs text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200">
+                <input
+                  type="checkbox"
+                  checked={forgiveRemaining}
+                  onChange={(e) => setForgiveRemaining(e.target.checked)}
+                  className="mt-0.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span>
+                  Ikhlaskan sisa{" "}
+                  <strong className="font-semibold">
+                    {formatCurrency(remainingAfter)}
+                  </strong>
+                </span>
+              </label>
+            )}
+
+            <div>
+              <Label>Akun</Label>
+              <Select value={accountId} onValueChange={setAccountId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih akun" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Tanggal</Label>
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+
             <Button
               onClick={submit}
               disabled={loading || !amount || !accountId}
@@ -470,8 +624,32 @@ function SettleDialog({
             >
               {loading ? "Menyimpan..." : "Simpan Pelunasan"}
             </Button>
-          </DialogFooter>
-        </div>
+
+            <div className="relative py-1">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-[#f0f0f0] dark:border-white/10" />
+              </div>
+              <div className="relative flex justify-center text-[11px]">
+                <span className="bg-white px-2 text-[#7a7a7a] dark:bg-[#1c1c1e] dark:text-[#cccccc]">
+                  atau
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowForgiveConfirm(true)}
+              disabled={loading}
+              className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-900/50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+            >
+              <HeartHandshake className="mr-1.5 h-4 w-4" />
+              {due.direction === "receivable"
+                ? "Ikhlaskan Piutang"
+                : "Tandai Lunas (Tanpa Bayar)"}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -490,6 +668,7 @@ function EditDueDialog({
   const [person, setPerson] = useState(due.person);
   const [title, setTitle] = useState(due.title);
   const [amount, setAmount] = useState(String(due.amount));
+  const [status, setStatus] = useState<"open" | "settled">(due.status);
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
@@ -500,7 +679,12 @@ function EditDueDialog({
       const res = await fetch(`/api/dues/${due.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ person: person.trim(), title, amount: amt }),
+        body: JSON.stringify({
+          person: person.trim(),
+          title,
+          amount: amt,
+          status,
+        }),
       });
       if (!res.ok) throw new Error("Gagal menyimpan");
       toast.success("Tagihan diperbarui");
@@ -538,6 +722,21 @@ function EditDueDialog({
               value={amount}
               onChange={(e) => setAmount(formatInputCurrency(e.target.value))}
             />
+          </div>
+          <div>
+            <Label>Status</Label>
+            <Select
+              value={status}
+              onValueChange={(val) => setStatus(val as "open" | "settled")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="open">Belum Lunas (Terbuka)</SelectItem>
+                <SelectItem value="settled">Lunas / Diikhlaskan</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <DialogFooter>
             <Button
