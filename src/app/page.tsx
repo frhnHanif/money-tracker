@@ -1,5 +1,6 @@
 "use client";
 import { useBalanceVisibility } from "@/contexts/balance-visibility-context";
+import { useBudgetSettings } from "@/hooks/use-budget-settings";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { AccountCarousel } from "@/components/home/account-carousel";
@@ -67,6 +68,7 @@ export default function HomePage() {
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
   const { showBalance, toggleBalance } = useBalanceVisibility();
+  const { isBudgetingEnabled } = useBudgetSettings();
 
   const { data: accounts = [], isLoading: accountsLoading } = useQuery<AccountLike[]>({
     queryKey: ["accounts"],
@@ -196,7 +198,7 @@ export default function HomePage() {
         />
 
         {/* Budget widget */}
-        {globalBudget && (
+        {isBudgetingEnabled && globalBudget && (
           <BudgetWidget
             budget={globalBudget.amount}
             spent={summary?.totalExpense ?? 0}

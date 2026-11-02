@@ -12,32 +12,47 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Pencil, Plus } from "lucide-react";
 import { formatInputCurrency } from "@/lib/utils";
+
+type PocketType = "living" | "saving" | "playing" | "giving" | "none";
 
 export function BudgetEditDialog({
   cat,
   current,
+  currentPocket = "none",
   onSave,
 }: {
   cat: { id: number; name: string };
   current: number;
-  onSave: (amount: number) => void;
+  currentPocket?: PocketType;
+  onSave: (amount: number, pocket: PocketType) => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
   const [display, setDisplay] = useState("");
+  const [pocket, setPocket] = useState<PocketType>(currentPocket);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (open) setDisplay(current > 0 ? current.toLocaleString("id-ID") : "");
-  }, [open, current]);
+    if (open) {
+      setDisplay(current > 0 ? current.toLocaleString("id-ID") : "");
+      setPocket(currentPocket || "none");
+    }
+  }, [open, current, currentPocket]);
 
   const submit = async () => {
     const amount = parseInt(display.replace(/\D/g, ""), 10);
     if (!amount || amount <= 0) return;
     setLoading(true);
     try {
-      await onSave(amount);
+      await onSave(amount, pocket);
       setOpen(false);
     } finally {
       setLoading(false);
@@ -65,25 +80,42 @@ export function BudgetEditDialog({
         <DialogHeader>
           <DialogTitle className="text-base">Budget {cat.name}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4 pt-1">
           <div>
-            <Label>Nominal budget per bulan</Label>
+            <Label className="text-xs">Nominal budget per bulan</Label>
             <Input
               type="text"
               inputMode="numeric"
               value={display}
               onChange={(e) => setDisplay(formatInputCurrency(e.target.value))}
               placeholder="Rp0"
-              className="h-12 text-center text-lg font-semibold"
+              className="mt-1.5 h-12 text-center text-lg font-semibold"
             />
           </div>
-          <DialogFooter>
+
+          <div>
+            <Label className="text-xs">Masuk ke Kantong (Pocket)</Label>
+            <Select value={pocket} onValueChange={(val) => setPocket(val as PocketType)}>
+              <SelectTrigger className="mt-1.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="living">Living (Biaya Hidup Pokok)</SelectItem>
+                <SelectItem value="saving">Saving (Tabungan & Investasi)</SelectItem>
+                <SelectItem value="playing">Playing (Hiburan & Keinginan)</SelectItem>
+                <SelectItem value="giving">Giving (Amal & Sosial)</SelectItem>
+                <SelectItem value="none">Tidak Masuk Kantong</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter className="pt-2">
             <Button
               onClick={submit}
               disabled={loading || !display}
               className="w-full"
             >
-              {loading ? "Menyimpan..." : "Simpan"}
+              {loading ? "Menyimpan..." : "Simpan Budget & Kantong"}
             </Button>
           </DialogFooter>
         </div>

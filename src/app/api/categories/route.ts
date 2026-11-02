@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       type: body.type || "expense",
       icon: body.icon || "tag",
       color: body.color || "#6b7280",
+      pocket: body.pocket || "none",
       sortOrder,
     })
     .returning();

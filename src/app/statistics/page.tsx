@@ -4,6 +4,8 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { FourPocketsOverview } from "@/components/statistics/four-pockets-overview";
+import { useBudgetSettings } from "@/hooks/use-budget-settings";
 import {
   Sheet,
   SheetContent,
@@ -91,6 +93,7 @@ export default function StatisticsPage() {
   const [year, setYear] = useState(initial.year);
   const [activeTab, setActiveTab] = useState<"expense" | "income">("expense");
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
+  const { isBudgetingEnabled } = useBudgetSettings();
 
   const syncUrl = (m: number, y: number) => {
     if (typeof window !== "undefined") {
@@ -440,6 +443,11 @@ export default function StatisticsPage() {
           </div>
         )}
 
+        {/* 4-Pockets Budgeting Overview */}
+        {activeTab === "expense" && isBudgetingEnabled && (
+          <FourPocketsOverview month={month} year={year} />
+        )}
+
         {/* Category List */}
         {chartData.length > 0 && (
           <div>
@@ -476,7 +484,7 @@ export default function StatisticsPage() {
                       <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
                         {item.categoryName}
                       </p>
-                      {budgetAmount != null && budgetAmount > 0 && activeTab === "expense" && (
+                      {isBudgetingEnabled && budgetAmount != null && budgetAmount > 0 && activeTab === "expense" && (
                         <div className="mt-1.5">
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#f0f0f0] dark:bg-[#3a3a3c]">
                             <div

@@ -6,7 +6,6 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
@@ -27,6 +26,7 @@ import {
   ChevronDown,
   Trash2,
   Plus,
+  Pencil,
   Tag,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,11 +36,13 @@ interface CategoryLike {
   name: string;
   type: string;
   color: string;
+  pocket?: "living" | "saving" | "playing" | "giving" | "none";
 }
 
 export default function CategoriesPage() {
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<CategoryLike | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
   const { data: categories = [] } = useQuery<CategoryLike[]>({
@@ -74,7 +76,7 @@ export default function CategoriesPage() {
       <div className="space-y-4 pb-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-[#7a7a7a] dark:text-[#cccccc]">
-            {categories.length} kategori
+            {categories.length} kategori aktif
           </p>
           <Button size="sm" onClick={() => setAddOpen(true)}>
             <Plus className="h-4 w-4" />
@@ -97,12 +99,19 @@ export default function CategoriesPage() {
                   <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
                     {cat.name}
                   </p>
-                  <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+                  <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc] capitalize">
                     {cat.type}
                   </p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-0.5">
+                <button
+                  onClick={() => setEditTarget(cat)}
+                  aria-label="Edit kategori"
+                  className="flex h-8 w-8 items-center justify-center rounded text-[#7a7a7a] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c] dark:hover:text-white"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
                 <button
                   onClick={() =>
                     reorderCategory.mutate({ id: cat.id, direction: "up" })
@@ -145,6 +154,15 @@ export default function CategoriesPage() {
       </div>
 
       <AddCategoryDialog open={addOpen} onOpenChange={setAddOpen} />
+      {editTarget && (
+        <EditCategoryDialog
+          category={editTarget}
+          open={!!editTarget}
+          onOpenChange={(open) => {
+            if (!open) setEditTarget(null);
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={!!deleteTarget}
@@ -233,6 +251,87 @@ function AddCategoryDialog({
               className="w-full"
             >
               Simpan
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------- Edit category dialog ---------- */
+function EditCategoryDialog({
+  category,
+  open,
+  onOpenChange,
+}: {
+  category: CategoryLike;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(category.name);
+  const [type, setType] = useState(category.type);
+  const [color, setColor] = useState(category.color || "#6b7280");
+
+  const mutation = useMutation({
+    mutationFn: (data: { name: string; type: string; color: string }) =>
+      fetch(`/api/categories/${category.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      onOpenChange(false);
+      toast.success("Kategori diperbarui");
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base">Edit Kategori</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Nama Kategori</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nama kategori"
+            />
+          </div>
+          <div>
+            <Label>Tipe</Label>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="expense">Expense</SelectItem>
+                <SelectItem value="income">Income</SelectItem>
+                <SelectItem value="both">Both</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Warna</Label>
+            <Input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="h-10 w-20"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => mutation.mutate({ name, type, color })}
+              disabled={!name}
+              className="w-full"
+            >
+              Simpan Perubahan
             </Button>
           </DialogFooter>
         </div>

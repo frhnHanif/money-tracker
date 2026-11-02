@@ -47,6 +47,7 @@ export async function getBudgets(userId: string) {
       categoryId: budgets.categoryId,
       categoryName: categories.name,
       categoryColor: categories.color,
+      categoryPocket: categories.pocket,
       amount: budgets.amount,
       createdAt: budgets.createdAt,
       updatedAt: budgets.updatedAt,
@@ -429,6 +430,7 @@ export async function getCategoryBreakdown(
       categoryName: categories.name,
       categoryIcon: categories.icon,
       categoryColor: categories.color,
+      categoryPocket: categories.pocket,
       total: sql<number>`SUM(${transactions.amount})::int`,
     })
     .from(transactions)
@@ -441,7 +443,7 @@ export async function getCategoryBreakdown(
         eq(transactions.type, type)
       )
     )
-    .groupBy(transactions.categoryId, categories.name, categories.icon, categories.color)
+    .groupBy(transactions.categoryId, categories.name, categories.icon, categories.color, categories.pocket)
     .orderBy(desc(sql`SUM(${transactions.amount})`));
 
   return result
@@ -469,4 +471,177 @@ export async function getMonthlyTrend(userId: string, monthCount: number = 6) {
   }
 
   return result;
+}
+
+// 4-Pockets Budgeting Summary
+export interface PocketCategoryDetail {
+  id: number;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  budget: number;
+  spent: number;
+}
+
+export interface PocketItemSummary {
+  pocket: "living" | "saving" | "playing" | "giving";
+  name: string;
+  targetBudget: number;
+  spent: number;
+  remaining: number;
+  percentage: number;
+  budgetRatio: number;
+  categories: PocketCategoryDetail[];
+}
+
+export async function getFourPocketsSummary(userId: string, month: number, year: number) {
+  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
+  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+
+  // 1. Fetch user categories and their budgets
+  const userCategories = await db
+    .select({
+      id: categories.id,
+      name: categories.name,
+      type: categories.type,
+      icon: categories.icon,
+      color: categories.color,
+      pocket: categories.pocket,
+      budgetAmount: budgets.amount,
+    })
+    .from(categories)
+    .leftJoin(
+      budgets,
+      and(eq(budgets.categoryId, categories.id), eq(budgets.userId, userId))
+    )
+    .where(and(eq(categories.userId, userId), eq(categories.isArchived, false)))
+    .orderBy(asc(categories.sortOrder), asc(categories.name));
+
+  // 2. Fetch monthly expense spent per category
+  const expenseRows = await db
+    .select({
+      categoryId: transactions.categoryId,
+      total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)::int`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        gte(transactions.date, startDate),
+        lte(transactions.date, endDate),
+        eq(transactions.type, "expense")
+      )
+    )
+    .groupBy(transactions.categoryId);
+
+  const spentMap = new Map<number, number>();
+  for (const r of expenseRows) {
+    if (r.categoryId) spentMap.set(r.categoryId, Number(r.total) || 0);
+  }
+
+  // 3. Fetch saving transfers (e.g. transfer_in to Mandiri account)
+  const savingTransferRows = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)::int`,
+    })
+    .from(transactions)
+    .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        gte(transactions.date, startDate),
+        lte(transactions.date, endDate),
+        eq(transactions.type, "transfer_in"),
+        sql`LOWER(${accounts.name}) LIKE '%mandiri%'`
+      )
+    );
+
+  const savingTransferTotal = Number(savingTransferRows[0]?.total) || 0;
+
+  // 4. Fetch income in current month (e.g. Gaji)
+  const incomeRows = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)::int`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        gte(transactions.date, startDate),
+        lte(transactions.date, endDate),
+        eq(transactions.type, "income")
+      )
+    );
+  const monthIncome = Number(incomeRows[0]?.total) || 0;
+
+  // 5. Group by pocket
+  const pocketConfigs: Record<
+    "living" | "saving" | "playing" | "giving",
+    { name: string; defaultTarget: number }
+  > = {
+    living: { name: "Living", defaultTarget: 4997000 },
+    saving: { name: "Saving", defaultTarget: 2600000 },
+    playing: { name: "Playing", defaultTarget: 833605 },
+    giving: { name: "Giving", defaultTarget: 350000 },
+  };
+
+  const pocketKeys: ("living" | "saving" | "playing" | "giving")[] = [
+    "living",
+    "saving",
+    "playing",
+    "giving",
+  ];
+
+  const result: PocketItemSummary[] = pocketKeys.map((key) => {
+    const config = pocketConfigs[key];
+    const pocketCats = userCategories.filter((c) => c.pocket === key);
+
+    const categoriesList: PocketCategoryDetail[] = pocketCats.map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon,
+      color: c.color,
+      budget: Number(c.budgetAmount) || 0,
+      spent: spentMap.get(c.id) || 0,
+    }));
+
+    const sumBudget = categoriesList.reduce((acc, c) => acc + c.budget, 0);
+    const targetBudget = sumBudget > 0 ? sumBudget : config.defaultTarget;
+
+    let totalSpent = categoriesList.reduce((acc, c) => acc + c.spent, 0);
+    if (key === "saving") {
+      totalSpent += savingTransferTotal;
+    }
+
+    const remaining = targetBudget - totalSpent;
+    const percentage = targetBudget > 0 ? Math.round((totalSpent / targetBudget) * 100) : 0;
+
+    return {
+      pocket: key,
+      name: config.name,
+      targetBudget,
+      spent: totalSpent,
+      remaining,
+      percentage,
+      budgetRatio: 0,
+      categories: categoriesList,
+    };
+  });
+
+  const totalTarget = result.reduce((acc, p) => acc + p.targetBudget, 0);
+  const totalSpent = result.reduce((acc, p) => acc + p.spent, 0);
+
+  // Compute adaptive percentage for each pocket based on actual budget set
+  for (const p of result) {
+    p.budgetRatio = totalTarget > 0 ? Number(((p.targetBudget / totalTarget) * 100).toFixed(1)) : 0;
+  }
+
+  return {
+    month,
+    year,
+    totalTarget,
+    totalSpent,
+    monthIncome,
+    pockets: result,
+  };
 }

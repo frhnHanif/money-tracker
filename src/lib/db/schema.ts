@@ -34,6 +34,14 @@ export const categoryTypeEnum = pgEnum("category_type", [
   "both",
 ]);
 
+export const pocketTypeEnum = pgEnum("pocket_type", [
+  "living",
+  "saving",
+  "playing",
+  "giving",
+  "none",
+]);
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: varchar("email", { length: 255 }).notNull().unique(),
@@ -76,6 +84,7 @@ export const categories = pgTable(
   type: categoryTypeEnum("type").notNull().default("expense"),
   icon: varchar("icon", { length: 50 }).default("tag"),
   color: varchar("color", { length: 7 }).default("#6b7280"),
+  pocket: pocketTypeEnum("pocket").notNull().default("none"),
   isArchived: boolean("is_archived").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
