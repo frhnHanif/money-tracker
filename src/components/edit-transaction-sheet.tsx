@@ -284,6 +284,15 @@ export function EditTransactionSheet({
                   <SelectValue placeholder="Pilih kategori" />
                 </SelectTrigger>
                 <SelectContent>
+                  {transaction?.categoryId &&
+                    !filteredCategories.some((cat) => cat.id === transaction.categoryId) && (
+                      <SelectItem
+                        key={transaction.categoryId}
+                        value={String(transaction.categoryId)}
+                      >
+                        {transaction.categoryName || "Kategori"} (Diarsipkan)
+                      </SelectItem>
+                    )}
                   {filteredCategories.map((cat) => (
                     <SelectItem key={cat.id} value={String(cat.id)}>
                       {cat.name}

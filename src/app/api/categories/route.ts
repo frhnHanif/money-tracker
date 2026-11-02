@@ -4,11 +4,12 @@ import { categories } from "@/lib/db/schema";
 import { getCategories } from "@/lib/db/queries";
 import { getUserId } from "@/lib/session";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const userId = await getUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const data = await getCategories(userId);
+  const status = (req.nextUrl.searchParams.get("status") as "active" | "archived" | "all") || "active";
+  const data = await getCategories(userId, status);
   return NextResponse.json(data);
 }
 

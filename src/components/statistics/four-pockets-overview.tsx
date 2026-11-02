@@ -20,6 +20,7 @@ interface CategoryDetail {
   color: string | null;
   budget: number;
   spent: number;
+  isArchived?: boolean;
 }
 
 interface PocketSummary {
@@ -217,6 +218,11 @@ export function FourPocketsOverview({
                           />
                           <span className="font-medium text-zinc-800 dark:text-zinc-200">
                             {c.name}
+                            {c.isArchived && (
+                              <span className="ml-1 text-[9px] text-zinc-400 font-normal">
+                                (Diarsipkan)
+                              </span>
+                            )}
                           </span>
                         </div>
                         <div className="text-right">

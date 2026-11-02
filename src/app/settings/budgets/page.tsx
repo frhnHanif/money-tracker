@@ -179,8 +179,8 @@ export default function BudgetsPage() {
   }, [expenseCats, budgetMap]);
 
   const totalAllBudgets = useMemo(() => {
-    return Object.values(budgetMap).reduce((acc: number, b) => acc + ((b as BudgetLike)?.amount || 0), 0);
-  }, [budgetMap]);
+    return expenseCats.reduce((acc, c) => acc + (budgetMap[c.id]?.amount || 0), 0);
+  }, [expenseCats, budgetMap]);
 
   const handleToggleBudgeting = () => {
     const next = !isBudgetingEnabled;
@@ -266,7 +266,7 @@ export default function BudgetsPage() {
                       Informasi Gaji Bulanan
                     </span>
                     <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {formatCurrency(monthlySalary)}
+                      {monthlySalary > 0 ? formatCurrency(monthlySalary) : "Belum diatur"}
                     </p>
                   </div>
                 </div>
@@ -275,13 +275,13 @@ export default function BudgetsPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setTempSalary(String(monthlySalary));
+                    setTempSalary(monthlySalary > 0 ? String(monthlySalary) : "");
                     setSalaryDialogOpen(true);
                   }}
                   className="h-7 gap-1 px-2 text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
                 >
                   <Pencil className="h-3 w-3" />
-                  Ubah
+                  {monthlySalary > 0 ? "Ubah" : "Atur"}
                 </Button>
               </div>
 
@@ -432,7 +432,7 @@ export default function BudgetsPage() {
                   type="number"
                   value={tempSalary}
                   onChange={(e) => setTempSalary(e.target.value)}
-                  placeholder="8780000"
+                  placeholder={monthlySalary > 0 ? String(monthlySalary) : "Contoh: 5000000"}
                 />
               </div>
             </div>

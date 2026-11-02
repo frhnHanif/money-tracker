@@ -481,9 +481,16 @@ export default function StatisticsPage() {
                       />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
-                        {item.categoryName}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-[15px] font-medium text-[#1d1d1f] dark:text-white">
+                          {item.categoryName}
+                        </p>
+                        {item.isArchived && (
+                          <span className="rounded bg-zinc-200 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                            Diarsipkan
+                          </span>
+                        )}
+                      </div>
                       {isBudgetingEnabled && budgetAmount != null && budgetAmount > 0 && activeTab === "expense" && (
                         <div className="mt-1.5">
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#f0f0f0] dark:bg-[#3a3a3c]">

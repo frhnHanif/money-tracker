@@ -50,6 +50,8 @@ export const users = pgTable("users", {
   image: text("image"),
   pinHash: text("pin_hash"),
   pinEnabled: boolean("pin_enabled").notNull().default(false),
+  monthlySalary: integer("monthly_salary").notNull().default(0),
+  budgetingEnabled: boolean("budgeting_enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { accounts, categories, transactions, budgets, dues, settlements, subscriptions } from "../db/schema";
+import { accounts, categories, transactions, budgets, dues, settlements, subscriptions, users } from "../db/schema";
 import { eq, and, gte, lte, sql, desc, asc, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 
@@ -22,11 +22,20 @@ export async function getAccountById(userId: string, id: number) {
 }
 
 // Categories
-export async function getCategories(userId: string) {
+export async function getCategories(
+  userId: string,
+  status: "active" | "archived" | "all" = "active"
+) {
+  const conditions = [eq(categories.userId, userId)];
+  if (status === "active") {
+    conditions.push(eq(categories.isArchived, false));
+  } else if (status === "archived") {
+    conditions.push(eq(categories.isArchived, true));
+  }
   return db
     .select()
     .from(categories)
-    .where(and(eq(categories.userId, userId), eq(categories.isArchived, false)))
+    .where(and(...conditions))
     .orderBy(asc(categories.sortOrder), asc(categories.name));
 }
 
@@ -53,7 +62,13 @@ export async function getBudgets(userId: string) {
       updatedAt: budgets.updatedAt,
     })
     .from(budgets)
-    .leftJoin(categories, eq(budgets.categoryId, categories.id))
+    .innerJoin(
+      categories,
+      and(
+        eq(budgets.categoryId, categories.id),
+        eq(categories.isArchived, false)
+      )
+    )
     .where(eq(budgets.userId, userId))
     .orderBy(asc(categories.name));
 }
@@ -431,6 +446,7 @@ export async function getCategoryBreakdown(
       categoryIcon: categories.icon,
       categoryColor: categories.color,
       categoryPocket: categories.pocket,
+      isArchived: categories.isArchived,
       total: sql<number>`SUM(${transactions.amount})::int`,
     })
     .from(transactions)
@@ -443,7 +459,14 @@ export async function getCategoryBreakdown(
         eq(transactions.type, type)
       )
     )
-    .groupBy(transactions.categoryId, categories.name, categories.icon, categories.color, categories.pocket)
+    .groupBy(
+      transactions.categoryId,
+      categories.name,
+      categories.icon,
+      categories.color,
+      categories.pocket,
+      categories.isArchived
+    )
     .orderBy(desc(sql`SUM(${transactions.amount})`));
 
   return result
@@ -481,6 +504,7 @@ export interface PocketCategoryDetail {
   color: string | null;
   budget: number;
   spent: number;
+  isArchived?: boolean;
 }
 
 export interface PocketItemSummary {
@@ -507,6 +531,7 @@ export async function getFourPocketsSummary(userId: string, month: number, year:
       icon: categories.icon,
       color: categories.color,
       pocket: categories.pocket,
+      isArchived: categories.isArchived,
       budgetAmount: budgets.amount,
     })
     .from(categories)
@@ -514,7 +539,7 @@ export async function getFourPocketsSummary(userId: string, month: number, year:
       budgets,
       and(eq(budgets.categoryId, categories.id), eq(budgets.userId, userId))
     )
-    .where(and(eq(categories.userId, userId), eq(categories.isArchived, false)))
+    .where(eq(categories.userId, userId))
     .orderBy(asc(categories.sortOrder), asc(categories.name));
 
   // 2. Fetch monthly expense spent per category
@@ -574,15 +599,24 @@ export async function getFourPocketsSummary(userId: string, month: number, year:
     );
   const monthIncome = Number(incomeRows[0]?.total) || 0;
 
-  // 5. Group by pocket
+  // Fetch user monthly salary for dynamic default pocket targets
+  const [userRow] = await db
+    .select({ monthlySalary: users.monthlySalary })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  const userSalary = userRow?.monthlySalary || 0;
+
+  // 5. Group by pocket with dynamic default target based on user salary
   const pocketConfigs: Record<
     "living" | "saving" | "playing" | "giving",
     { name: string; defaultTarget: number }
   > = {
-    living: { name: "Living", defaultTarget: 4997000 },
-    saving: { name: "Saving", defaultTarget: 2600000 },
-    playing: { name: "Playing", defaultTarget: 833605 },
-    giving: { name: "Giving", defaultTarget: 350000 },
+    living: { name: "Living", defaultTarget: Math.round(userSalary * 0.57) },
+    saving: { name: "Saving", defaultTarget: Math.round(userSalary * 0.30) },
+    playing: { name: "Playing", defaultTarget: Math.round(userSalary * 0.09) },
+    giving: { name: "Giving", defaultTarget: Math.round(userSalary * 0.04) },
   };
 
   const pocketKeys: ("living" | "saving" | "playing" | "giving")[] = [
@@ -594,15 +628,21 @@ export async function getFourPocketsSummary(userId: string, month: number, year:
 
   const result: PocketItemSummary[] = pocketKeys.map((key) => {
     const config = pocketConfigs[key];
-    const pocketCats = userCategories.filter((c) => c.pocket === key);
+    const pocketCats = userCategories.filter((c) => {
+      if (c.pocket !== key) return false;
+      const spent = spentMap.get(c.id) || 0;
+      // Active categories are always included; archived categories only if they had transactions in this month
+      return !c.isArchived || spent > 0;
+    });
 
     const categoriesList: PocketCategoryDetail[] = pocketCats.map((c) => ({
       id: c.id,
       name: c.name,
       icon: c.icon,
       color: c.color,
-      budget: Number(c.budgetAmount) || 0,
+      budget: c.isArchived ? 0 : (Number(c.budgetAmount) || 0),
       spent: spentMap.get(c.id) || 0,
+      isArchived: c.isArchived,
     }));
 
     const sumBudget = categoriesList.reduce((acc, c) => acc + c.budget, 0);
