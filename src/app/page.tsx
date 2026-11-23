@@ -104,9 +104,8 @@ export default function HomePage() {
   });
 
   const { data: recentTransactions = [] } = useQuery({
-    queryKey: ["transactions", "recent", month, year, resetDay],
-    queryFn: () =>
-      fetch(`/api/transactions?month=${month}&year=${year}&resetDay=${resetDay}&limit=5`).then((r) => r.json()),
+    queryKey: ["transactions", "recent"],
+    queryFn: () => fetch("/api/transactions?limit=5").then((r) => r.json()),
   });
 
   const { data: dues = [] } = useQuery<DueItem[]>({

@@ -19,8 +19,6 @@ import { TransactionActionSheet } from "@/components/transaction-action-sheet";
 import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
 import { DateRangePickerSheet } from "@/components/date-range-picker-sheet";
 import { useLongPress } from "@/hooks/use-long-press";
-import { useBudgetSettings } from "@/hooks/use-budget-settings";
-import { getCycleRange } from "@/lib/cycle";
 import { format, subDays } from "date-fns";
 import { id } from "date-fns/locale";
 import {
@@ -335,41 +333,71 @@ export default function TransactionsPage() {
       ),
   });
 
-  const { resetDay } = useBudgetSettings();
-
   const prevMonth = () => {
+    const now = new Date();
+    const nowM = now.getMonth() + 1;
+    const nowY = now.getFullYear();
+
+    // Jika saat ini di "7 Hari Terakhir", klik mundur membuka Bulan Ini Full (1 s.d. 30/31)
+    if (rangeLabel === "7 Hari Terakhir") {
+      const newFrom = new Date(nowY, nowM - 1, 1);
+      const newTo = new Date(nowY, nowM, 0);
+      setMonth(nowM);
+      setYear(nowY);
+      setDateRange({ from: newFrom, to: newTo });
+      setRangeLabel(`${MONTHS[nowM - 1]} ${nowY}`);
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `?month=${nowM}&year=${nowY}`);
+      }
+      return;
+    }
+
+    // Jika sudah di bulan kalender, mundur 1 bulan kalender penuh (1-30/31)
     let nextM = month - 1;
     let nextY = year;
     if (nextM < 1) {
       nextM = 12;
       nextY = year - 1;
     }
-    const cycle = getCycleRange(nextY, nextM, resetDay);
-    const newFrom = new Date(cycle.startDate + "T00:00:00");
-    const newTo = new Date(cycle.endDate + "T23:59:59");
+    const newFrom = new Date(nextY, nextM - 1, 1);
+    const newTo = new Date(nextY, nextM, 0);
     setMonth(nextM);
     setYear(nextY);
     setDateRange({ from: newFrom, to: newTo });
-    setRangeLabel(resetDay === 1 ? `${MONTHS[nextM - 1]} ${nextY}` : cycle.label);
+    setRangeLabel(`${MONTHS[nextM - 1]} ${nextY}`);
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", `?month=${nextM}&year=${nextY}`);
     }
   };
 
   const nextMonth = () => {
+    const now = new Date();
+    const nowM = now.getMonth() + 1;
+    const nowY = now.getFullYear();
+
+    // Jika saat ini di "7 Hari Terakhir", sudah paling depan
+    if (rangeLabel === "7 Hari Terakhir") {
+      return;
+    }
+
+    // Jika sudah berada di bulan kalender berjalan (misal November 2026), klik maju kembali ke "7 Hari Terakhir"
+    if (month === nowM && year === nowY) {
+      handleResetToDefault();
+      return;
+    }
+
     let nextM = month + 1;
     let nextY = year;
     if (nextM > 12) {
       nextM = 1;
       nextY = year + 1;
     }
-    const cycle = getCycleRange(nextY, nextM, resetDay);
-    const newFrom = new Date(cycle.startDate + "T00:00:00");
-    const newTo = new Date(cycle.endDate + "T23:59:59");
+    const newFrom = new Date(nextY, nextM - 1, 1);
+    const newTo = new Date(nextY, nextM, 0);
     setMonth(nextM);
     setYear(nextY);
     setDateRange({ from: newFrom, to: newTo });
-    setRangeLabel(resetDay === 1 ? `${MONTHS[nextM - 1]} ${nextY}` : cycle.label);
+    setRangeLabel(`${MONTHS[nextM - 1]} ${nextY}`);
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", `?month=${nextM}&year=${nextY}`);
     }
@@ -474,7 +502,8 @@ export default function TransactionsPage() {
             variant="ghost"
             size="icon"
             onClick={nextMonth}
-            className="text-[#7a7a7a] hover:bg-[#f5f5f7] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c]"
+            disabled={rangeLabel === "7 Hari Terakhir"}
+            className="text-[#7a7a7a] hover:bg-[#f5f5f7] dark:text-[#cccccc] dark:hover:bg-[#2a2a2c] disabled:opacity-30 disabled:pointer-events-none"
           >
             <ChevronRight className="h-5 w-5" />
           </Button>
