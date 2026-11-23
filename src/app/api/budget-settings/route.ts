@@ -15,6 +15,7 @@ export async function GET() {
     .select({
       monthlySalary: users.monthlySalary,
       isBudgetingEnabled: users.budgetingEnabled,
+      resetDay: users.resetDay,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -27,12 +28,14 @@ export async function GET() {
   return NextResponse.json({
     monthlySalary: user.monthlySalary ?? 0,
     isBudgetingEnabled: user.isBudgetingEnabled ?? true,
+    resetDay: user.resetDay ?? 1,
   });
 }
 
 const budgetSettingsSchema = z.object({
   monthlySalary: z.number().int().min(0).optional(),
   isBudgetingEnabled: z.boolean().optional(),
+  resetDay: z.number().int().min(1).max(31).optional(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -57,6 +60,9 @@ export async function PATCH(req: NextRequest) {
   if (parsed.data.isBudgetingEnabled !== undefined) {
     update.budgetingEnabled = parsed.data.isBudgetingEnabled;
   }
+  if (parsed.data.resetDay !== undefined) {
+    update.resetDay = parsed.data.resetDay;
+  }
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "No changes provided" }, { status: 400 });
@@ -69,10 +75,12 @@ export async function PATCH(req: NextRequest) {
     .returning({
       monthlySalary: users.monthlySalary,
       isBudgetingEnabled: users.budgetingEnabled,
+      resetDay: users.resetDay,
     });
 
   return NextResponse.json({
     monthlySalary: updated.monthlySalary,
     isBudgetingEnabled: updated.isBudgetingEnabled,
+    resetDay: updated.resetDay,
   });
 }

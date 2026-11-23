@@ -9,7 +9,9 @@ export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1));
   const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()));
+  const resetDayParam = searchParams.get("resetDay");
+  const resetDay = resetDayParam ? parseInt(resetDayParam) : undefined;
 
-  const data = await getFourPocketsSummary(userId, month, year);
+  const data = await getFourPocketsSummary(userId, month, year, resetDay);
   return NextResponse.json(data);
 }

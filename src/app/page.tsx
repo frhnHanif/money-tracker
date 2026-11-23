@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 import { useBalanceVisibility } from "@/contexts/balance-visibility-context";
 import { useBudgetSettings } from "@/hooks/use-budget-settings";
 import { useQuery } from "@tanstack/react-query";
@@ -8,6 +9,7 @@ import { ActivityWidget } from "@/components/home/activity-widget";
 import { BudgetWidget } from "@/components/home/budget-widget";
 import { formatCurrency, groupTransactions } from "@/lib/utils";
 import { dueRemaining, type DueItem } from "@/lib/dues";
+import { getCycleRange, getCurrentCycle, MONTHS } from "@/lib/cycle";
 import {
   TrendingUp,
   TrendingDown,
@@ -23,11 +25,6 @@ import {
   monthlyPrice,
   type SubscriptionLike,
 } from "@/lib/subscriptions";
-
-const MONTHS = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-];
 
 interface AccountLike {
   id: number;
@@ -64,11 +61,14 @@ interface BreakdownItem {
 }
 
 export default function HomePage() {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
   const { showBalance, toggleBalance } = useBalanceVisibility();
-  const { isBudgetingEnabled } = useBudgetSettings();
+  const { isBudgetingEnabled, resetDay } = useBudgetSettings();
+
+  const now = useMemo(() => new Date(), []);
+  const currentCycle = useMemo(() => getCurrentCycle(resetDay, now), [resetDay, now]);
+  const month = currentCycle.month;
+  const year = currentCycle.year;
+  const cycleRange = useMemo(() => getCycleRange(year, month, resetDay), [year, month, resetDay]);
 
   const { data: accounts = [], isLoading: accountsLoading } = useQuery<AccountLike[]>({
     queryKey: ["accounts"],
@@ -83,18 +83,18 @@ export default function HomePage() {
   });
 
   const { data: summary } = useQuery<SummaryLike>({
-    queryKey: ["summary", month, year],
+    queryKey: ["summary", month, year, resetDay],
     queryFn: () =>
-      fetch(`/api/transactions/summary?month=${month}&year=${year}`).then((r) =>
+      fetch(`/api/transactions/summary?month=${month}&year=${year}&resetDay=${resetDay}`).then((r) =>
         r.json()
       ),
   });
 
   const { data: breakdown = [] } = useQuery<BreakdownItem[]>({
-    queryKey: ["breakdown", month, year, "expense"],
+    queryKey: ["breakdown", month, year, "expense", resetDay],
     queryFn: () =>
       fetch(
-        `/api/transactions/breakdown?month=${month}&year=${year}&type=expense`
+        `/api/transactions/breakdown?month=${month}&year=${year}&type=expense&resetDay=${resetDay}`
       ).then((r) => r.json()),
   });
 
@@ -104,9 +104,9 @@ export default function HomePage() {
   });
 
   const { data: recentTransactions = [] } = useQuery({
-    queryKey: ["transactions", "recent", month, year],
+    queryKey: ["transactions", "recent", month, year, resetDay],
     queryFn: () =>
-      fetch(`/api/transactions?month=${month}&year=${year}&limit=5`).then((r) => r.json()),
+      fetch(`/api/transactions?month=${month}&year=${year}&resetDay=${resetDay}&limit=5`).then((r) => r.json()),
   });
 
   const { data: dues = [] } = useQuery<DueItem[]>({
@@ -194,7 +194,7 @@ export default function HomePage() {
           breakdown={breakdown}
           daysTracked={summary?.daysTracked ?? 0}
           daysInMonth={summary?.daysInMonth ?? 30}
-          monthLabel={MONTHS[month - 1]}
+          monthLabel={resetDay === 1 ? MONTHS[month - 1] : cycleRange.shortLabel}
         />
 
         {/* Budget widget */}

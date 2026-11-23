@@ -19,6 +19,8 @@ import { TransactionActionSheet } from "@/components/transaction-action-sheet";
 import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
 import { DateRangePickerSheet } from "@/components/date-range-picker-sheet";
 import { useLongPress } from "@/hooks/use-long-press";
+import { useBudgetSettings } from "@/hooks/use-budget-settings";
+import { getCycleRange } from "@/lib/cycle";
 import { format, subDays } from "date-fns";
 import { id } from "date-fns/locale";
 import {
@@ -333,6 +335,8 @@ export default function TransactionsPage() {
       ),
   });
 
+  const { resetDay } = useBudgetSettings();
+
   const prevMonth = () => {
     let nextM = month - 1;
     let nextY = year;
@@ -340,12 +344,13 @@ export default function TransactionsPage() {
       nextM = 12;
       nextY = year - 1;
     }
-    const newFrom = new Date(nextY, nextM - 1, 1);
-    const newTo = new Date(nextY, nextM, 0);
+    const cycle = getCycleRange(nextY, nextM, resetDay);
+    const newFrom = new Date(cycle.startDate + "T00:00:00");
+    const newTo = new Date(cycle.endDate + "T23:59:59");
     setMonth(nextM);
     setYear(nextY);
     setDateRange({ from: newFrom, to: newTo });
-    setRangeLabel(`${MONTHS[nextM - 1]} ${nextY}`);
+    setRangeLabel(resetDay === 1 ? `${MONTHS[nextM - 1]} ${nextY}` : cycle.label);
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", `?month=${nextM}&year=${nextY}`);
     }
@@ -358,12 +363,13 @@ export default function TransactionsPage() {
       nextM = 1;
       nextY = year + 1;
     }
-    const newFrom = new Date(nextY, nextM - 1, 1);
-    const newTo = new Date(nextY, nextM, 0);
+    const cycle = getCycleRange(nextY, nextM, resetDay);
+    const newFrom = new Date(cycle.startDate + "T00:00:00");
+    const newTo = new Date(cycle.endDate + "T23:59:59");
     setMonth(nextM);
     setYear(nextY);
     setDateRange({ from: newFrom, to: newTo });
-    setRangeLabel(`${MONTHS[nextM - 1]} ${nextY}`);
+    setRangeLabel(resetDay === 1 ? `${MONTHS[nextM - 1]} ${nextY}` : cycle.label);
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", `?month=${nextM}&year=${nextY}`);
     }

@@ -27,8 +27,10 @@ import {
   Pencil,
   Power,
   Banknote,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ResetDayDialog } from "@/components/reset-day-dialog";
 
 interface CategoryLike {
   id: number;
@@ -82,12 +84,15 @@ export default function BudgetsPage() {
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; categoryName?: string | null } | null>(null);
   const [salaryDialogOpen, setSalaryDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const {
     isBudgetingEnabled,
     setBudgetingEnabled,
     monthlySalary,
     setSalary,
+    resetDay,
+    setResetDay,
     mounted,
   } = useBudgetSettings();
 
@@ -285,6 +290,35 @@ export default function BudgetsPage() {
                 </Button>
               </div>
 
+              {/* Row 1.5: Tanggal Reset Siklus */}
+              <div className="flex items-center justify-between border-b border-zinc-100 py-3 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                    <CalendarClock className="size-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Tanggal Reset Siklus
+                    </span>
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      {resetDay === 1
+                        ? "Tanggal 1 (Awal bulan)"
+                        : `Setiap tanggal ${resetDay}`}
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setResetDialogOpen(true)}
+                  className="h-7 gap-1 px-2 text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Ubah
+                </Button>
+              </div>
+
               {/* Row 2: Total Budget */}
               <div className="pt-3">
                 <div className="flex items-center justify-between">
@@ -455,6 +489,13 @@ export default function BudgetsPage() {
         onConfirm={() => {
           if (deleteTarget) deleteBudget.mutate(deleteTarget.id);
         }}
+      />
+
+      <ResetDayDialog
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        currentResetDay={resetDay}
+        onSave={setResetDay}
       />
     </AppShell>
   );

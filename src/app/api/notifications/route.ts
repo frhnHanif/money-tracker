@@ -9,7 +9,9 @@ import {
   getLastTransactionDate,
   countTransactionsOnDate,
   getDues,
+  getUserResetDay,
 } from "@/lib/db/queries";
+import { getCurrentCycle } from "@/lib/cycle";
 import { isPaidThisCycle, daysUntil } from "@/lib/subscriptions";
 import { dueRemaining } from "@/lib/dues";
 import { formatCurrency } from "@/lib/utils";
@@ -33,8 +35,8 @@ export async function GET(req: NextRequest) {
 
   const items: NotificationItem[] = [];
   const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  const resetDay = await getUserResetDay(userId);
+  const { month, year } = getCurrentCycle(resetDay, now);
 
   // 1) Subscriptions overdue / due soon
   const subs = await getSubscriptions(userId);

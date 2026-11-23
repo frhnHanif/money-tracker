@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { FourPocketsOverview } from "@/components/statistics/four-pockets-overview";
 import { useBudgetSettings } from "@/hooks/use-budget-settings";
+import { getCycleRange, getCurrentCycle } from "@/lib/cycle";
 import {
   Sheet,
   SheetContent,
@@ -77,23 +78,38 @@ const COLORS = [
 ];
 
 export default function StatisticsPage() {
+  const { isBudgetingEnabled, resetDay } = useBudgetSettings();
+
   const [initial] = useState(() => {
     if (typeof window === "undefined") {
       const now = new Date();
-      return { month: now.getMonth() + 1, year: now.getFullYear() };
+      return { month: now.getMonth() + 1, year: now.getFullYear(), hasParam: false };
     }
     const params = new URLSearchParams(window.location.search);
     const m = Number(params.get("month"));
     const y = Number(params.get("year"));
-    if (m >= 1 && m <= 12 && y >= 2000) return { month: m, year: y };
+    if (m >= 1 && m <= 12 && y >= 2000) return { month: m, year: y, hasParam: true };
     const now = new Date();
-    return { month: now.getMonth() + 1, year: now.getFullYear() };
+    return { month: now.getMonth() + 1, year: now.getFullYear(), hasParam: false };
   });
   const [month, setMonth] = useState(initial.month);
   const [year, setYear] = useState(initial.year);
   const [activeTab, setActiveTab] = useState<"expense" | "income">("expense");
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
-  const { isBudgetingEnabled } = useBudgetSettings();
+
+  // Sync initial month & year with active cycle if URL has no month param
+  useEffect(() => {
+    if (!initial.hasParam) {
+      const active = getCurrentCycle(resetDay, new Date());
+      setMonth(active.month);
+      setYear(active.year);
+    }
+  }, [resetDay, initial.hasParam]);
+
+  const cycleRange = useMemo(
+    () => getCycleRange(year, month, resetDay),
+    [year, month, resetDay]
+  );
 
   const syncUrl = (m: number, y: number) => {
     if (typeof window !== "undefined") {
@@ -102,17 +118,17 @@ export default function StatisticsPage() {
   };
 
   const { data: breakdown = [] } = useQuery({
-    queryKey: ["breakdown", month, year, activeTab],
+    queryKey: ["breakdown", month, year, activeTab, resetDay],
     queryFn: () =>
       fetch(
-        `/api/transactions/breakdown?month=${month}&year=${year}&type=${activeTab}`
+        `/api/transactions/breakdown?month=${month}&year=${year}&type=${activeTab}&resetDay=${resetDay}`
       ).then((r) => r.json()),
   });
 
   const { data: summary } = useQuery({
-    queryKey: ["summary", month, year],
+    queryKey: ["summary", month, year, resetDay],
     queryFn: () =>
-      fetch(`/api/transactions/summary?month=${month}&year=${year}`).then((r) =>
+      fetch(`/api/transactions/summary?month=${month}&year=${year}&resetDay=${resetDay}`).then((r) =>
         r.json()
       ),
   });
@@ -120,15 +136,15 @@ export default function StatisticsPage() {
   const prevM = month === 1 ? 12 : month - 1;
   const prevY = month === 1 ? year - 1 : year;
   const { data: prevSummary } = useQuery({
-    queryKey: ["summary", prevM, prevY],
+    queryKey: ["summary", prevM, prevY, resetDay],
     queryFn: () =>
-      fetch(`/api/transactions/summary?month=${prevM}&year=${prevY}`).then((r) =>
+      fetch(`/api/transactions/summary?month=${prevM}&year=${prevY}&resetDay=${resetDay}`).then((r) =>
         r.json()
       ),
   });
 
   const { data: trend = [] } = useQuery({
-    queryKey: ["trend"],
+    queryKey: ["trend", resetDay],
     queryFn: () => fetch("/api/transactions/trend").then((r) => r.json()),
   });
 
@@ -148,14 +164,20 @@ export default function StatisticsPage() {
     [budgets]
   );
 
-  // Drill-down: fetch transactions for selected category
+  // Drill-down: fetch transactions for selected category within the cycle
   const { data: categoryTransactions = [] } = useQuery({
-    queryKey: ["categoryTransactions", month, year, activeTab, selectedCategory?.categoryId],
+    queryKey: [
+      "categoryTransactions",
+      cycleRange.startDate,
+      cycleRange.endDate,
+      activeTab,
+      selectedCategory?.categoryId,
+    ],
     queryFn: async () => {
       if (!selectedCategory) return [];
       const params = new URLSearchParams();
-      params.set("month", String(month));
-      params.set("year", String(year));
+      params.set("startDate", cycleRange.startDate);
+      params.set("endDate", cycleRange.endDate);
       params.set("type", activeTab);
       params.set("categoryId", String(selectedCategory.categoryId));
       const res = await fetch(`/api/transactions?${params}`);
@@ -169,10 +191,10 @@ export default function StatisticsPage() {
     [breakdown]
   );
 
-  const daysInMonth = new Date(year, month, 0).getDate();
+  const daysInPeriod = cycleRange.daysInPeriod;
   const curExpense = summary?.totalExpense || 0;
   const prevExpense = prevSummary?.totalExpense || 0;
-  const avgDailyExpense = Math.round(curExpense / daysInMonth);
+  const avgDailyExpense = Math.round(curExpense / daysInPeriod);
   const expenseDeltaPct =
     prevExpense > 0 ? ((curExpense - prevExpense) / prevExpense) * 100 : 0;
   const expenseDeltaText =
@@ -249,9 +271,16 @@ export default function StatisticsPage() {
           >
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          <h2 className="text-base font-semibold tracking-[-0.21px] text-[#1d1d1f] dark:text-white">
-            {MONTHS[month - 1]} {year}
-          </h2>
+          <div className="flex flex-col items-center text-center">
+            <h2 className="text-base font-semibold tracking-[-0.21px] text-[#1d1d1f] dark:text-white">
+              {resetDay === 1 ? `${MONTHS[month - 1]} ${year}` : cycleRange.label}
+            </h2>
+            {/* {resetDay !== 1 && (
+              <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                Siklus Gajian tgl {resetDay}
+              </span>
+            )} */}
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -340,7 +369,7 @@ export default function StatisticsPage() {
         {/* Insights */}
         <div>
           <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f] dark:text-white">
-            Insight {MONTHS[month - 1]}
+            Insight {resetDay === 1 ? MONTHS[month - 1] : cycleRange.shortLabel}
           </h3>
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-lg bg-[#f5f5f7] p-3 dark:bg-[#2a2a2c]">

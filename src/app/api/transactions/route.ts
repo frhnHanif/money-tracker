@@ -4,7 +4,8 @@ import { transactions, accounts, categories } from "@/lib/db/schema";
 import { eq, desc, and, gte, lte, or, type SQL } from "drizzle-orm";
 import { getUserId } from "@/lib/session";
 import { v4 as uuidv4 } from "uuid";
-import { updateAccountBalance } from "@/lib/db/queries";
+import { updateAccountBalance, getUserResetDay } from "@/lib/db/queries";
+import { getCycleRange } from "@/lib/cycle";
 
 export async function GET(req: NextRequest) {
   const userId = await getUserId();
@@ -30,11 +31,11 @@ export async function GET(req: NextRequest) {
   } else if (!startDate && month && year) {
     const m = parseInt(month);
     const y = parseInt(year);
-    const startStr = `${y}-${String(m).padStart(2, "0")}-01`;
-    const lastDay = new Date(y, m, 0).getDate();
-    const endStr = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-    conditions.push(gte(transactions.date, startStr));
-    conditions.push(lte(transactions.date, endStr));
+    const resetDayParam = searchParams.get("resetDay");
+    const userResetDay = resetDayParam ? parseInt(resetDayParam) : await getUserResetDay(userId);
+    const { startDate: sDate, endDate: eDate } = getCycleRange(y, m, userResetDay);
+    conditions.push(gte(transactions.date, sDate));
+    conditions.push(lte(transactions.date, eDate));
   }
 
   if (accountId && accountId !== "all") {

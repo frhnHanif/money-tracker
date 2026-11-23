@@ -2,6 +2,16 @@ import { db } from "../db";
 import { accounts, categories, transactions, budgets, dues, settlements, subscriptions, users } from "../db/schema";
 import { eq, and, gte, lte, sql, desc, asc, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { getCycleRange, getCurrentCycle } from "../cycle";
+
+export async function getUserResetDay(userId: string): Promise<number> {
+  const [user] = await db
+    .select({ resetDay: users.resetDay })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return user?.resetDay ?? 1;
+}
 
 // Accounts
 export async function getAccounts(userId: string) {
@@ -184,6 +194,7 @@ export async function getTransactions({
   userId,
   month,
   year,
+  resetDay,
   accountId,
   categoryId,
   type,
@@ -191,6 +202,7 @@ export async function getTransactions({
   userId: string;
   month?: number;
   year?: number;
+  resetDay?: number;
   accountId?: number;
   categoryId?: number;
   type?: string;
@@ -198,10 +210,10 @@ export async function getTransactions({
   const conditions: (SQL<unknown> | undefined)[] = [eq(transactions.userId, userId)];
 
   if (month && year) {
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
-    conditions.push(gte(transactions.date, startDate.toISOString().split("T")[0]));
-    conditions.push(lte(transactions.date, endDate.toISOString().split("T")[0]));
+    const userResetDay = resetDay ?? (await getUserResetDay(userId));
+    const { startDate, endDate } = getCycleRange(year, month, userResetDay);
+    conditions.push(gte(transactions.date, startDate));
+    conditions.push(lte(transactions.date, endDate));
   }
 
   if (accountId) {
@@ -297,10 +309,11 @@ export async function getTotalBalance(userId: string) {
 export async function getAccountsMonthNetBatch(
   userId: string,
   month: number,
-  year: number
+  year: number,
+  resetDay?: number
 ): Promise<Record<number, number>> {
-  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+  const userResetDay = resetDay ?? (await getUserResetDay(userId));
+  const { startDate, endDate } = getCycleRange(year, month, userResetDay);
 
   const rows = await db
     .select({
@@ -335,9 +348,15 @@ export async function getAccountsMonthNetBatch(
 }
 
 // Net change of an account in a given month (transfers included)
-export async function getAccountMonthNet(userId: string, accountId: number, month: number, year: number) {
-  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+export async function getAccountMonthNet(
+  userId: string,
+  accountId: number,
+  month: number,
+  year: number,
+  resetDay?: number
+) {
+  const userResetDay = resetDay ?? (await getUserResetDay(userId));
+  const { startDate, endDate } = getCycleRange(year, month, userResetDay);
 
   const result = await db
     .select({
@@ -367,9 +386,14 @@ export async function getAccountMonthNet(userId: string, accountId: number, mont
 }
 
 // Monthly summary
-export async function getMonthlySummary(userId: string, month: number, year: number) {
-  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+export async function getMonthlySummary(
+  userId: string,
+  month: number,
+  year: number,
+  resetDay?: number
+) {
+  const userResetDay = resetDay ?? (await getUserResetDay(userId));
+  const { startDate, endDate, daysInPeriod } = getCycleRange(year, month, userResetDay);
 
   const result = await db
     .select({
@@ -391,7 +415,9 @@ export async function getMonthlySummary(userId: string, month: number, year: num
     totalExpense: Number(result[0]?.totalExpense) || 0,
     net: (Number(result[0]?.totalIncome) || 0) - (Number(result[0]?.totalExpense) || 0),
     daysTracked: Number(result[0]?.daysTracked) || 0,
-    daysInMonth: new Date(year, month, 0).getDate(),
+    daysInMonth: daysInPeriod,
+    startDate,
+    endDate,
   };
 }
 
@@ -434,10 +460,11 @@ export async function getCategoryBreakdown(
   userId: string,
   month: number,
   year: number,
-  type: "expense" | "income" = "expense"
+  type: "expense" | "income" = "expense",
+  resetDay?: number
 ) {
-  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+  const userResetDay = resetDay ?? (await getUserResetDay(userId));
+  const { startDate, endDate } = getCycleRange(year, month, userResetDay);
 
   const result = await db
     .select({
@@ -478,17 +505,40 @@ export async function getCategoryBreakdown(
 }
 
 // Monthly trend (6 months)
-export async function getMonthlyTrend(userId: string, monthCount: number = 6) {
+export async function getMonthlyTrend(
+  userId: string,
+  monthCount: number = 6,
+  resetDay?: number
+) {
   const result = [];
   const now = new Date();
+  const userResetDay = resetDay ?? (await getUserResetDay(userId));
 
-  for (let i = monthCount - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const month = d.getMonth() + 1;
-    const year = d.getFullYear();
-    const summary = await getMonthlySummary(userId, month, year);
+  // Determine current active cycle
+  const currentCycle = getCurrentCycle(userResetDay, now);
+  let curYear = currentCycle.year;
+  let curMonth = currentCycle.month;
+
+  // We want monthCount cycles ending at currentCycle
+  const cycles: { year: number; month: number }[] = [];
+  for (let i = 0; i < monthCount; i++) {
+    cycles.unshift({ year: curYear, month: curMonth });
+    if (curMonth === 1) {
+      curMonth = 12;
+      curYear -= 1;
+    } else {
+      curMonth -= 1;
+    }
+  }
+
+  for (const c of cycles) {
+    const cycleRange = getCycleRange(c.year, c.month, userResetDay);
+    const summary = await getMonthlySummary(userId, c.month, c.year, userResetDay);
     result.push({
-      month: d.toLocaleDateString("id-ID", { month: "short", year: "numeric" }),
+      month: cycleRange.shortLabel,
+      fullLabel: cycleRange.label,
+      cycleMonth: c.month,
+      cycleYear: c.year,
       ...summary,
     });
   }
@@ -518,9 +568,14 @@ export interface PocketItemSummary {
   categories: PocketCategoryDetail[];
 }
 
-export async function getFourPocketsSummary(userId: string, month: number, year: number) {
-  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+export async function getFourPocketsSummary(
+  userId: string,
+  month: number,
+  year: number,
+  resetDay?: number
+) {
+  const userResetDay = resetDay ?? (await getUserResetDay(userId));
+  const { startDate, endDate } = getCycleRange(year, month, userResetDay);
 
   // 1. Fetch user categories and their budgets
   const userCategories = await db
@@ -679,6 +734,9 @@ export async function getFourPocketsSummary(userId: string, month: number, year:
   return {
     month,
     year,
+    startDate,
+    endDate,
+    resetDay: userResetDay,
     totalTarget,
     totalSpent,
     monthIncome,

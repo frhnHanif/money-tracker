@@ -16,10 +16,13 @@ import {
   LogOut,
   ChevronRight,
   Lock,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePinLock } from "@/contexts/pin-lock-context";
 import { PinSettingsDialog } from "@/components/pin-settings-dialog";
+import { useBudgetSettings } from "@/hooks/use-budget-settings";
+import { ResetDayDialog } from "@/components/reset-day-dialog";
 
 function Section({
   label,
@@ -217,8 +220,38 @@ function PinRow({ onClick }: { onClick: () => void }) {
   );
 }
 
+function ResetDayRow({ onClick, resetDay }: { onClick: () => void; resetDay: number }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#f5f5f7] dark:hover:bg-[#2a2a2c]"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#10b981]/18">
+        <CalendarClock className="h-4 w-4 text-[#10b981]" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-medium text-[#1d1d1f] dark:text-white">
+          Tanggal Reset Statistik
+        </p>
+        <p className="text-xs text-[#7a7a7a] dark:text-[#cccccc]">
+          {resetDay === 1
+            ? "Awal bulan (Tanggal 1)"
+            : `Setiap tanggal ${resetDay} (Gajian)`}
+        </p>
+      </div>
+      <span className="mr-1 rounded-full bg-[#f0f0f0] px-2 py-0.5 text-[11px] font-medium text-[#1d1d1f] dark:bg-[#3a3a3c] dark:text-[#cccccc]">
+        Tgl {resetDay}
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-[#7a7a7a] dark:text-[#cccccc]" />
+    </button>
+  );
+}
+
 export default function SettingsPage() {
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const { resetDay, setResetDay } = useBudgetSettings();
 
   return (
     <AppShell>
@@ -235,6 +268,7 @@ export default function SettingsPage() {
           <Row icon={Wallet} color="#0066cc" title="Akun & Rekening" href="/settings/accounts" />
           <Row icon={Tag} color="#8b5cf6" title="Kategori" href="/settings/categories" />
           <Row icon={Target} color="#f59e0b" title="Budget Bulanan" href="/settings/budgets" />
+          <ResetDayRow onClick={() => setResetDialogOpen(true)} resetDay={resetDay} />
         </Section>
 
         <Section label="Data">
@@ -260,6 +294,13 @@ export default function SettingsPage() {
       <PinSettingsDialog
         open={pinDialogOpen}
         onOpenChange={setPinDialogOpen}
+      />
+
+      <ResetDayDialog
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        currentResetDay={resetDay}
+        onSave={setResetDay}
       />
     </AppShell>
   );

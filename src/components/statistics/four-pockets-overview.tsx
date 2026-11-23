@@ -78,12 +78,12 @@ export function FourPocketsOverview({
   year: number;
 }) {
   const [expandedPocket, setExpandedPocket] = useState<string | null>(null);
-  const { isBudgetingEnabled, mounted } = useBudgetSettings();
+  const { isBudgetingEnabled, mounted, resetDay } = useBudgetSettings();
 
   const { data, isLoading } = useQuery<FourPocketsResponse>({
-    queryKey: ["four-pockets", month, year],
+    queryKey: ["four-pockets", month, year, resetDay],
     queryFn: () =>
-      fetch(`/api/statistics/four-pockets?month=${month}&year=${year}`).then(
+      fetch(`/api/statistics/four-pockets?month=${month}&year=${year}&resetDay=${resetDay}`).then(
         (r) => r.json()
       ),
     staleTime: 30 * 1000,

@@ -7,12 +7,15 @@ import { useEffect, useState } from "react";
 interface BudgetSettingsResponse {
   monthlySalary: number;
   isBudgetingEnabled: boolean;
+  resetDay: number;
 }
 
 const getSalaryKey = (userId?: string) =>
   userId ? `monthly_salary_${userId}` : "monthly_salary";
 const getEnabledKey = (userId?: string) =>
   userId ? `budgeting_enabled_${userId}` : "budgeting_enabled";
+const getResetDayKey = (userId?: string) =>
+  userId ? `budget_reset_day_${userId}` : "budget_reset_day";
 
 export function useBudgetSettings() {
   const queryClient = useQueryClient();
@@ -22,6 +25,7 @@ export function useBudgetSettings() {
   // Local storage cached fallback for instant rendering
   const [cachedSalary, setCachedSalary] = useState<number | null>(null);
   const [cachedEnabled, setCachedEnabled] = useState<boolean | null>(null);
+  const [cachedResetDay, setCachedResetDay] = useState<number | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -34,6 +38,11 @@ export function useBudgetSettings() {
     if (e !== null) {
       setCachedEnabled(e === "true");
     }
+    const r = localStorage.getItem(getResetDayKey(userId));
+    if (r !== null) {
+      const parsed = parseInt(r, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 31) setCachedResetDay(parsed);
+    }
   }, [userId]);
 
   const { data, isLoading } = useQuery<BudgetSettingsResponse>({
@@ -45,6 +54,7 @@ export function useBudgetSettings() {
       if (userId) {
         localStorage.setItem(getSalaryKey(userId), String(json.monthlySalary));
         localStorage.setItem(getEnabledKey(userId), String(json.isBudgetingEnabled));
+        localStorage.setItem(getResetDayKey(userId), String(json.resetDay ?? 1));
       }
       return json;
     },
@@ -53,7 +63,11 @@ export function useBudgetSettings() {
   });
 
   const mutation = useMutation({
-    mutationFn: async (payload: { monthlySalary?: number; isBudgetingEnabled?: boolean }) => {
+    mutationFn: async (payload: {
+      monthlySalary?: number;
+      isBudgetingEnabled?: boolean;
+      resetDay?: number;
+    }) => {
       const res = await fetch("/api/budget-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -78,10 +92,15 @@ export function useBudgetSettings() {
         localStorage.setItem(getEnabledKey(userId), String(newValues.isBudgetingEnabled));
         setCachedEnabled(newValues.isBudgetingEnabled);
       }
+      if (newValues.resetDay !== undefined) {
+        localStorage.setItem(getResetDayKey(userId), String(newValues.resetDay));
+        setCachedResetDay(newValues.resetDay);
+      }
 
       queryClient.setQueryData<BudgetSettingsResponse>(["budget-settings", userId], (old) => ({
         monthlySalary: newValues.monthlySalary ?? old?.monthlySalary ?? 0,
         isBudgetingEnabled: newValues.isBudgetingEnabled ?? old?.isBudgetingEnabled ?? true,
+        resetDay: newValues.resetDay ?? old?.resetDay ?? 1,
       }));
 
       return { previous };
@@ -91,6 +110,7 @@ export function useBudgetSettings() {
         queryClient.setQueryData(["budget-settings", userId], context.previous);
         localStorage.setItem(getSalaryKey(userId), String(context.previous.monthlySalary));
         localStorage.setItem(getEnabledKey(userId), String(context.previous.isBudgetingEnabled));
+        localStorage.setItem(getResetDayKey(userId), String(context.previous.resetDay ?? 1));
       }
     },
     onSettled: () => {
@@ -98,6 +118,11 @@ export function useBudgetSettings() {
         queryClient.invalidateQueries({ queryKey: ["budget-settings", userId] });
       }
       queryClient.invalidateQueries({ queryKey: ["four-pockets"] });
+      queryClient.invalidateQueries({ queryKey: ["summary"] });
+      queryClient.invalidateQueries({ queryKey: ["breakdown"] });
+      queryClient.invalidateQueries({ queryKey: ["trend"] });
+      queryClient.invalidateQueries({ queryKey: ["balances"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
 
@@ -105,6 +130,8 @@ export function useBudgetSettings() {
     data?.isBudgetingEnabled ?? cachedEnabled ?? true;
   const monthlySalary =
     data?.monthlySalary ?? cachedSalary ?? 0;
+  const resetDay =
+    data?.resetDay ?? cachedResetDay ?? 1;
   const mounted = status !== "loading";
 
   return {
@@ -112,6 +139,8 @@ export function useBudgetSettings() {
     setBudgetingEnabled: (val: boolean) => mutation.mutate({ isBudgetingEnabled: val }),
     monthlySalary,
     setSalary: (val: number) => mutation.mutate({ monthlySalary: val }),
+    resetDay,
+    setResetDay: (val: number) => mutation.mutateAsync({ resetDay: val }),
     mounted,
     isLoading: status === "loading" || (isLoading && cachedSalary === null),
   };

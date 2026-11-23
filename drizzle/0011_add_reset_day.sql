@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "reset_day" integer DEFAULT 1 NOT NULL;
