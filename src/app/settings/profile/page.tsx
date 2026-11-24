@@ -53,12 +53,20 @@ export default function ProfilePage() {
     e.target.value = "";
     if (!file) return;
 
+    if (!file.type.startsWith("image/")) {
+      toast.error("File harus berupa gambar (JPG, PNG, WEBP)");
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
         setCropSrc(reader.result);
         setCropOpen(true);
       }
+    };
+    reader.onerror = () => {
+      toast.error("Gagal membaca file gambar");
     };
     reader.readAsDataURL(file);
   };
@@ -80,11 +88,18 @@ export default function ProfilePage() {
         return false;
       }
 
-      await update({ image: data.image });
+      // Try updating session cache, but don't fail the upload if session sync glitches
+      try {
+        await update({ image: data.image });
+      } catch (updateErr) {
+        console.warn("[Profile] Session update warning:", updateErr);
+      }
+
       toast.success("Foto profil diperbarui");
       return true;
-    } catch {
-      toast.error("Gagal upload foto profil");
+    } catch (err: unknown) {
+      console.error("[Profile] Upload avatar error:", err);
+      toast.error(err instanceof Error ? err.message : "Gagal upload foto profil");
       return false;
     } finally {
       setUploading(false);

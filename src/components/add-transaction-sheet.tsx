@@ -120,7 +120,6 @@ export function AddTransactionSheet({
     handleSubmit,
     setValue,
     reset,
-    watch,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -271,6 +270,29 @@ export function AddTransactionSheet({
                 }}
                 className="text-lg font-semibold text-center h-12"
               />
+              {(() => {
+                const numAmt = parseInt(displayAmount.replace(/\D/g, "") || "0", 10) || 0;
+                const numFee = parseInt(displayFee.replace(/\D/g, "") || "0", 10) || 0;
+                if (numAmt > 0) {
+                  return (
+                    <div className="rounded-lg bg-[#f5f5f7] p-2.5 text-xs text-[#7a7a7a] dark:bg-[#272729] dark:text-[#cccccc] space-y-1">
+                      <div className="flex justify-between">
+                        <span>Pengirim terpotong:</span>
+                        <span className="font-semibold text-red-500 dark:text-red-400">
+                          {formatCurrency(numAmt + numFee)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Penerima masuk:</span>
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          {formatCurrency(numAmt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
 

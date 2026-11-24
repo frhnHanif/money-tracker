@@ -51,7 +51,7 @@ type TxRow = {
   date?: string;
   notes?: string;
   fee?: number;
-  transferIn?: { id?: number; accountId?: number; accountName?: string };
+  transferIn?: { id?: number; accountId?: number; accountName?: string; amount?: number };
   groupedTransfer?: boolean;
 };
 
@@ -128,7 +128,10 @@ function TransactionRowItem({
         </div>
         <div className="flex shrink-0 items-center pl-3">
           <p className="text-sm font-semibold text-[#7a7a7a] dark:text-[#cccccc]">
-            {formatCurrency(tx.amount ?? 0)}
+            {formatCurrency(
+              tx.transferIn?.amount ??
+                (tx.fee ? Math.max(0, (tx.amount ?? 0) - tx.fee) : tx.amount ?? 0)
+            )}
           </p>
         </div>
       </div>

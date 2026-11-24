@@ -108,18 +108,20 @@ export async function POST(req: NextRequest) {
   const { type, amount, accountId, toAccountId, categoryId, description, notes, date, fee } = body;
 
   if (type === "transfer" && toAccountId) {
-    // Create paired transfer transactions
+    // Create paired transfer transactions:
+    // Sender is charged transferAmount + adminFee, receiver receives transferAmount
     const groupId = uuidv4();
     const adminFee = parseInt(fee) || 0;
     const transferAmount = parseInt(amount);
-    const receiveAmount = transferAmount - adminFee;
+    const totalOutAmount = transferAmount + adminFee;
+    const receiveAmount = transferAmount;
 
     const [outTx] = await db
       .insert(transactions)
       .values({
         userId,
         type: "transfer_out",
-        amount: transferAmount,
+        amount: totalOutAmount,
         fee: adminFee,
         date: date || new Date().toISOString().split("T")[0],
         accountId: parseInt(accountId),

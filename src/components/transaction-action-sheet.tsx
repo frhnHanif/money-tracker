@@ -31,7 +31,7 @@ export interface TransactionItemData {
   date?: string;
   notes?: string;
   fee?: number;
-  transferIn?: { id?: number; accountId?: number; accountName?: string };
+  transferIn?: { id?: number; accountId?: number; accountName?: string; amount?: number };
   groupedTransfer?: boolean;
 }
 
@@ -142,7 +142,14 @@ export function TransactionActionSheet({
                   : isAdjustment
                     ? "±"
                     : "-"}
-              {formatCurrency(transaction.amount || 0)}
+              {formatCurrency(
+                isTransfer
+                  ? transaction.transferIn?.amount ??
+                      (transaction.fee
+                        ? Math.max(0, (transaction.amount || 0) - transaction.fee)
+                        : transaction.amount || 0)
+                  : transaction.amount || 0
+              )}
             </p>
             {typeof transaction.fee === "number" && transaction.fee > 0 && (
               <Badge
@@ -155,6 +162,11 @@ export function TransactionActionSheet({
               >
                 Admin {formatCurrency(transaction.fee)}
               </Badge>
+            )}
+            {isTransfer && typeof transaction.fee === "number" && transaction.fee > 0 && (
+              <p className="mt-1 text-[11px] text-[#7a7a7a] dark:text-[#cccccc]">
+                Total keluar: {formatCurrency(transaction.amount || 0)}
+              </p>
             )}
           </div>
         </div>

@@ -288,7 +288,10 @@ export default function HomePage() {
                   </div>
                   {tx.groupedTransfer ? (
                     <p className="shrink-0 pl-4 text-sm font-semibold text-[#7a7a7a] dark:text-[#cccccc]">
-                      {formatCurrency(tx.amount)}
+                      {formatCurrency(
+                        tx.transferIn?.amount ??
+                          (tx.fee ? Math.max(0, (tx.amount ?? 0) - tx.fee) : tx.amount ?? 0)
+                      )}
                     </p>
                   ) : (
                   <p

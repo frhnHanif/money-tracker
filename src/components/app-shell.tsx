@@ -29,6 +29,7 @@ const pageTitles: Record<string, string> = {
   "/settings/categories": "Kategori",
   "/settings/budgets": "Budget Bulanan",
   "/settings/import": "Import CSV",
+  "/settings/report": "Generate Report",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {

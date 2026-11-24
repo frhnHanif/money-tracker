@@ -101,11 +101,14 @@ export async function PATCH(
     const outTx = pair.find((t) => t.type === "transfer_out");
     const inTx = pair.find((t) => t.type === "transfer_in");
 
-    const transferAmount =
-      amount !== undefined ? parseInt(String(amount)) : (outTx?.amount ?? row.amount);
     const adminFee =
       fee !== undefined ? parseInt(String(fee)) || 0 : (outTx?.fee ?? 0);
-    const receiveAmount = transferAmount - adminFee;
+    const baseTransferAmount =
+      amount !== undefined
+        ? parseInt(String(amount))
+        : (inTx?.amount ?? (outTx ? Math.max(0, outTx.amount - (outTx.fee || 0)) : row.amount));
+    const totalOutAmount = baseTransferAmount + adminFee;
+    const receiveAmount = baseTransferAmount;
 
     const txDate = date || row.date;
     const desc = description !== undefined ? description : row.description;
@@ -119,7 +122,7 @@ export async function PATCH(
       await db
         .update(transactions)
         .set({
-          amount: transferAmount,
+          amount: totalOutAmount,
           fee: adminFee,
           accountId: fromAccId,
           date: txDate,

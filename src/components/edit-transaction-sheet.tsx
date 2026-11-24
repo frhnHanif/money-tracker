@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
-import { formatInputCurrency } from "@/lib/utils";
+import { formatCurrency, formatInputCurrency } from "@/lib/utils";
 import { CalendarIcon, ChevronDown } from "lucide-react";
 import { TransactionItemData } from "@/components/transaction-action-sheet";
 
@@ -107,10 +107,15 @@ export function EditTransactionSheet({
           ? "income"
           : "expense";
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTransactionType(type);
       setValue("type", type as "expense" | "income" | "transfer");
 
-      const amtStr = String(transaction.amount || "");
+      const baseAmt = isTransfer
+        ? transaction.transferIn?.amount ??
+          (transaction.fee ? Math.max(0, (transaction.amount || 0) - transaction.fee) : transaction.amount)
+        : transaction.amount;
+      const amtStr = String(baseAmt || "");
       setDisplayAmount(formatInputCurrency(amtStr));
       setValue("amount", amtStr.replace(/\D/g, ""));
 
@@ -266,6 +271,29 @@ export function EditTransactionSheet({
                 }}
                 className="h-12 text-center text-lg font-semibold"
               />
+              {(() => {
+                const numAmt = parseInt(displayAmount.replace(/\D/g, "") || "0", 10) || 0;
+                const numFee = parseInt(displayFee.replace(/\D/g, "") || "0", 10) || 0;
+                if (numAmt > 0) {
+                  return (
+                    <div className="rounded-lg bg-[#f5f5f7] p-2.5 text-xs text-[#7a7a7a] dark:bg-[#272729] dark:text-[#cccccc] space-y-1">
+                      <div className="flex justify-between">
+                        <span>Pengirim terpotong:</span>
+                        <span className="font-semibold text-red-500 dark:text-red-400">
+                          {formatCurrency(numAmt + numFee)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Penerima masuk:</span>
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          {formatCurrency(numAmt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
 

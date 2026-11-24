@@ -12,6 +12,7 @@ import {
   Tag,
   Target,
   Upload,
+  FileText,
   Bell,
   LogOut,
   ChevronRight,
@@ -272,6 +273,7 @@ export default function SettingsPage() {
         </Section>
 
         <Section label="Data">
+          <Row icon={FileText} color="#10b981" title="Generate Report & Export PDF" href="/settings/report" />
           <Row icon={Upload} color="#06b6d4" title="Import CSV" href="/settings/import" />
         </Section>
 
