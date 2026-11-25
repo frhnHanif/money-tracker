@@ -76,15 +76,17 @@ export function TransactionActionSheet({
             <div
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
               style={{
-                backgroundColor: isAdjustment
-                  ? "#7a7a7a20"
-                  : (transaction.categoryColor || "#3b82f6") + "20",
+                backgroundColor: isTransfer
+                  ? "#3b82f620"
+                  : isAdjustment
+                    ? "#7a7a7a20"
+                    : (transaction.categoryColor || "#3b82f6") + "20",
               }}
             >
               {isTransfer ? (
                 <ArrowRightLeft
                   className="h-5 w-5"
-                  style={{ color: transaction.categoryColor || "#3b82f6" }}
+                  style={{ color: "#3b82f6" }}
                 />
               ) : isAdjustment ? (
                 <Wrench className="h-5 w-5" style={{ color: "#7a7a7a" }} />
@@ -161,6 +163,18 @@ export function TransactionActionSheet({
                 }}
               >
                 Admin {formatCurrency(transaction.fee)}
+              </Badge>
+            )}
+            {isTransfer && transaction.categoryName && (
+              <Badge
+                className="mt-1 ml-1 px-1.5 py-0 text-[10px] leading-4"
+                style={{
+                  backgroundColor: (transaction.categoryColor || "#10b981") + "20",
+                  color: transaction.categoryColor || "#10b981",
+                  borderColor: "transparent",
+                }}
+              >
+                {transaction.categoryName}
               </Badge>
             )}
             {isTransfer && typeof transaction.fee === "number" && transaction.fee > 0 && (

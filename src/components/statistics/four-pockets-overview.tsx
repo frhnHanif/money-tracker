@@ -205,7 +205,9 @@ export function FourPocketsOverview({
               {isExpanded && p.categories.length > 0 && (
                 <div className="mt-3 divide-y divide-zinc-200/50 border-t border-zinc-200/60 pt-2 dark:divide-zinc-800/50 dark:border-zinc-800">
                   {p.categories.map((c) => {
-                    const catOver = c.budget > 0 && c.spent > c.budget;
+                    const catOver = p.pocket !== "saving" && c.budget > 0 && c.spent > c.budget;
+                    const catSavingMet =
+                      p.pocket === "saving" && c.budget > 0 && c.spent >= c.budget;
                     return (
                       <div
                         key={c.id}
@@ -228,7 +230,11 @@ export function FourPocketsOverview({
                         <div className="text-right">
                           <span
                             className={`font-semibold ${
-                              catOver ? "text-red-500" : "text-zinc-700 dark:text-zinc-300"
+                              catOver
+                                ? "text-red-500"
+                                : catSavingMet
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-zinc-700 dark:text-zinc-300"
                             }`}
                           >
                             {formatCurrency(c.spent)}

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BottomNav } from "@/components/bottom-nav";
-import { AddTransactionSheet } from "@/components/add-transaction-sheet";
+import { AddTransactionSheet, type DueMode } from "@/components/add-transaction-sheet";
 import { NotificationBell } from "@/components/notification-bell";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -34,14 +34,23 @@ const pageTitles: Record<string, string> = {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [addOpen, setAddOpen] = useState(false);
+  const [initialDueMode, setInitialDueMode] = useState<DueMode>("none");
   const router = useRouter();
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Open the add-transaction sheet from anywhere (e.g. empty states)
+  // Open the add-transaction sheet from anywhere (e.g. empty states, split bill button)
   useEffect(() => {
-    const openAdd = () => setAddOpen(true);
+    const openAdd = (e?: Event) => {
+      const custom = e as CustomEvent<{ dueMode?: DueMode }>;
+      if (custom?.detail?.dueMode) {
+        setInitialDueMode(custom.detail.dueMode);
+      } else {
+        setInitialDueMode("none");
+      }
+      setAddOpen(true);
+    };
     window.addEventListener("money-tracker:open-add", openAdd);
     return () =>
       window.removeEventListener("money-tracker:open-add", openAdd);
@@ -143,9 +152,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <AddTransactionSheet
         open={addOpen}
-        onOpenChange={setAddOpen}
+        onOpenChange={(v) => {
+          setAddOpen(v);
+          if (!v) setInitialDueMode("none");
+        }}
         accounts={accounts}
         categories={categories}
+        initialDueMode={initialDueMode}
         onSuccess={handleSuccess}
       />
     </div>

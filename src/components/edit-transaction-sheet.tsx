@@ -28,7 +28,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
-import { formatCurrency, formatInputCurrency } from "@/lib/utils";
+import {
+  filterTransferCategories,
+  formatCurrency,
+  formatInputCurrency,
+} from "@/lib/utils";
 import { CalendarIcon, ChevronDown } from "lucide-react";
 import { TransactionItemData } from "@/components/transaction-action-sheet";
 
@@ -51,7 +55,7 @@ interface EditTransactionSheetProps {
   onOpenChange: (open: boolean) => void;
   transaction: TransactionItemData | null;
   accounts: { id: number; name: string }[];
-  categories: { id: number; name: string; type: string }[];
+  categories: { id: number; name: string; type: string; pocket?: string | null }[];
   onSuccess?: () => void;
 }
 
@@ -154,6 +158,10 @@ export function EditTransactionSheet({
   const filteredCategories = categories.filter(
     (c) => c.type === "both" || c.type === transactionType
   );
+  const transferCategories = filterTransferCategories(categories);
+  const selectedTransferCategory = transferCategories.find(
+    (c) => String(c.id) === categoryId
+  );
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -162,6 +170,7 @@ export function EditTransactionSheet({
     queryClient.invalidateQueries({ queryKey: ["breakdown"] });
     queryClient.invalidateQueries({ queryKey: ["trend"] });
     queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["four-pockets"] });
   };
 
   const onSubmit = async (data: FormData) => {
@@ -181,6 +190,10 @@ export function EditTransactionSheet({
           body.toAccountId = parseInt(data.toAccountId, 10);
         }
         body.fee = parseInt(data.fee?.replace(/\D/g, "") || "0", 10) || 0;
+        body.categoryId =
+          data.categoryId && data.categoryId !== "__none"
+            ? parseInt(data.categoryId, 10)
+            : null;
       } else if (!isAdjustment) {
         body.type = data.type;
         body.categoryId = data.categoryId ? parseInt(data.categoryId, 10) : null;
@@ -297,8 +310,55 @@ export function EditTransactionSheet({
             </div>
           )}
 
-          {/* Category (non-transfer only) */}
-          {!isTransfer && !isAdjustment && (
+          {/* Category (non-transfer & non-adjustment, or Saving/Topup for transfer) */}
+          {isTransfer ? (
+            <div className="space-y-1.5">
+              <Label>Kategori Transfer (opsional)</Label>
+              <Select
+                value={categoryId || "__none"}
+                onValueChange={(v) => {
+                  const actual = v === "__none" ? "" : v;
+                  setCategoryId(actual);
+                  setValue("categoryId", actual);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tanpa kategori" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">Tanpa kategori</SelectItem>
+                  {transaction?.categoryId &&
+                    !transferCategories.some(
+                      (cat) => cat.id === transaction.categoryId
+                    ) && (
+                      <SelectItem
+                        key={transaction.categoryId}
+                        value={String(transaction.categoryId)}
+                      >
+                        {transaction.categoryName || "Kategori"}
+                      </SelectItem>
+                    )}
+                  {transferCategories.map((cat) => (
+                    <SelectItem key={cat.id} value={String(cat.id)}>
+                      {cat.name}
+                      {cat.pocket === "saving" ? " (Saving)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* <p
+                className={`text-[11px] ${
+                  selectedTransferCategory?.pocket === "saving"
+                    ? "text-emerald-600 dark:text-emerald-400 font-medium"
+                    : "text-[#7a7a7a] dark:text-[#cccccc]"
+                }`}
+              >
+                {selectedTransferCategory?.pocket === "saving"
+                  ? "Masuk ke progress kantong Saving (4-Pockets) tanpa menambah pengeluaran."
+                  : "Pilih kategori Saving (mis. Dana Darurat) untuk mencatat tabungan, atau Topup."}
+              </p> */}
+            </div>
+          ) : !isAdjustment ? (
             <div className="space-y-2">
               <Label>Kategori</Label>
               <Select
@@ -329,7 +389,7 @@ export function EditTransactionSheet({
                 </SelectContent>
               </Select>
             </div>
-          )}
+          ) : null}
 
           {/* Account */}
           <div className="space-y-2">

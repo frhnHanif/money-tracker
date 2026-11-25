@@ -40,6 +40,7 @@ import {
   CheckCircle2,
   Handshake,
   HeartHandshake,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -153,6 +154,32 @@ export default function PiutangPage() {
           </button>
         </div>
 
+        {/* Quick Actions */}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent("money-tracker:open-add", {
+                  detail: { dueMode: "split_bill" },
+                })
+              );
+            }}
+            className="flex-1 border-amber-500/30 bg-amber-500/5 text-amber-600 hover:bg-amber-500/10 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400 text-xs sm:text-sm font-medium"
+          >
+            <Zap className="mr-1.5 h-4 w-4" />
+            Split Bill Baru
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setManualOpen(true)}
+            className="flex-1 text-xs sm:text-sm"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Catat {tab === "receivable" ? "Piutang" : "Utang"}
+          </Button>
+        </div>
+
         {/* Tab switch */}
         <div className="flex rounded-lg bg-[#f5f5f7] p-1 dark:bg-[#2a2a2c]">
           <button
@@ -199,10 +226,25 @@ export default function PiutangPage() {
                   : "Catat saat kamu pinjam atau dibayarin orang"}
               </p>
             </div>
-            <Button onClick={() => setManualOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Catat {tab === "receivable" ? "Piutang" : "Utang"} Manual
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 w-full max-w-xs">
+              <Button
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("money-tracker:open-add", {
+                      detail: { dueMode: "split_bill" },
+                    })
+                  );
+                }}
+                className="bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-700"
+              >
+                <Zap className="mr-1.5 h-4 w-4" />
+                Split Bill Baru
+              </Button>
+              <Button variant="outline" onClick={() => setManualOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Catat Manual
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -447,15 +489,29 @@ function SettleDialog({
       const talangan = categories.find(
         (c) => c.name.toLowerCase() === "talangan/piutang"
       );
+
+      const isTalangan =
+        due.title?.toLowerCase().includes("split bill") ||
+        due.title?.toLowerCase().includes("talangan");
+
+      const txType =
+        due.direction === "receivable"
+          ? isTalangan
+            ? "adjustment_in"
+            : "income"
+          : isTalangan
+            ? "adjustment_out"
+            : "expense";
+
       const res = await fetch("/api/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: due.direction === "receivable" ? "income" : "expense",
+          type: txType,
           amount: amt,
           accountId: parseInt(accountId),
-          categoryId: talangan?.id ?? null,
-          description: due.title || "Pelunasan",
+          categoryId: isTalangan ? null : (talangan?.id ?? null),
+          description: due.title ? `${due.title} (Pelunasan)` : "Pelunasan",
           notes: due.person,
           date,
         }),

@@ -117,6 +117,14 @@ export async function PATCH(
       accountId !== undefined ? parseInt(String(accountId)) : outTx?.accountId;
     const toAccId =
       toAccountId !== undefined ? parseInt(String(toAccountId)) : inTx?.accountId;
+    const parsedCat =
+      categoryId !== undefined
+        ? categoryId
+          ? parseInt(String(categoryId), 10)
+          : null
+        : row.categoryId;
+    const nextCategoryId =
+      parsedCat !== null && !Number.isNaN(parsedCat) ? parsedCat : null;
 
     if (outTx && fromAccId) {
       await db
@@ -125,6 +133,7 @@ export async function PATCH(
           amount: totalOutAmount,
           fee: adminFee,
           accountId: fromAccId,
+          categoryId: nextCategoryId,
           date: txDate,
           description: desc,
           notes: note,
@@ -140,6 +149,7 @@ export async function PATCH(
           amount: receiveAmount,
           fee: 0,
           accountId: toAccId,
+          categoryId: nextCategoryId,
           date: txDate,
           description: desc,
           notes: note,

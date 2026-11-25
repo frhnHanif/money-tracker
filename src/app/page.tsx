@@ -281,6 +281,9 @@ export default function HomePage() {
                       {tx.groupedTransfer
                         ? `${tx.accountName} → ${tx.transferIn?.accountName}`
                         : `${tx.accountName} • ${tx.date}`}
+                      {tx.groupedTransfer && tx.categoryName && (
+                        <span className="ml-1 text-[#10b981]">• {tx.categoryName}</span>
+                      )}
                       {tx.groupedTransfer && tx.fee > 0 && (
                         <span className="ml-1 text-[#f97316]">• Admin: {formatCurrency(tx.fee)}</span>
                       )}

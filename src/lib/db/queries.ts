@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { accounts, categories, transactions, budgets, dues, settlements, subscriptions, users } from "../db/schema";
-import { eq, and, gte, lte, sql, desc, asc, or } from "drizzle-orm";
+import { eq, and, gte, lte, sql, desc, asc, or, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getCycleRange, getCurrentCycle } from "../cycle";
 
@@ -619,7 +619,32 @@ export async function getFourPocketsSummary(
     if (r.categoryId) spentMap.set(r.categoryId, Number(r.total) || 0);
   }
 
-  // 3. Fetch saving transfers (e.g. transfer_in to Mandiri account)
+  // 2b. Fetch categorized saving transfers (transfer_in whose category belongs to 'saving' pocket)
+  const categorizedSavingTransferRows = await db
+    .select({
+      categoryId: transactions.categoryId,
+      total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)::int`,
+    })
+    .from(transactions)
+    .innerJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        gte(transactions.date, startDate),
+        lte(transactions.date, endDate),
+        eq(transactions.type, "transfer_in"),
+        eq(categories.pocket, "saving")
+      )
+    )
+    .groupBy(transactions.categoryId);
+
+  for (const r of categorizedSavingTransferRows) {
+    if (r.categoryId) {
+      spentMap.set(r.categoryId, (spentMap.get(r.categoryId) || 0) + (Number(r.total) || 0));
+    }
+  }
+
+  // 3. Fetch uncategorized legacy saving transfers (transfer_in to Mandiri account without categoryId)
   const savingTransferRows = await db
     .select({
       total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)::int`,
@@ -632,6 +657,7 @@ export async function getFourPocketsSummary(
         gte(transactions.date, startDate),
         lte(transactions.date, endDate),
         eq(transactions.type, "transfer_in"),
+        isNull(transactions.categoryId),
         sql`LOWER(${accounts.name}) LIKE '%mandiri%'`
       )
     );

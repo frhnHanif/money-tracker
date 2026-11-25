@@ -84,3 +84,24 @@ export function groupTransactions<
 
   return rows;
 }
+
+/**
+ * Filter categories shown in Transfer mode to only Saving-pocket categories
+ * (e.g. Dana Darurat) and Topup categories, with Saving sorted first.
+ */
+export function filterTransferCategories<
+  T extends { id: number; name: string; pocket?: string | null }
+>(categories: T[]): T[] {
+  const isTopup = (name: string) => /top\s*up/i.test(name);
+  const isSaving = (c: T) =>
+    c.pocket === "saving" || /dana\s*darurat/i.test(c.name);
+
+  return categories
+    .filter((c) => isSaving(c) || isTopup(c.name))
+    .sort((a, b) => {
+      const aSaving = isSaving(a) ? 0 : 1;
+      const bSaving = isSaving(b) ? 0 : 1;
+      if (aSaving !== bSaving) return aSaving - bSaving;
+      return a.name.localeCompare(b.name);
+    });
+}

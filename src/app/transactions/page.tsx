@@ -14,7 +14,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn, formatCurrency, formatDate, groupTransactions } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import {
+  groupTransactionsWithSplitBill,
+  matchesDisplayItemSearch,
+  type DisplayTransactionItem,
+  type TxRow,
+} from "@/lib/split-bill-grouping";
+import {
+  SplitBillGroupRow,
+  SplitBillSettlementGroupRow,
+} from "@/components/split-bill-transaction-row";
 import { TransactionActionSheet } from "@/components/transaction-action-sheet";
 import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
 import { DateRangePickerSheet } from "@/components/date-range-picker-sheet";
@@ -29,6 +39,7 @@ import {
   ArrowRightLeft,
   Plus,
   Wrench,
+  Users,
   Calendar as CalendarIcon,
 } from "lucide-react";
 
@@ -36,24 +47,6 @@ const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
-
-type TxRow = {
-  id: number;
-  type: string;
-  description?: string;
-  categoryName?: string;
-  categoryColor?: string;
-  categoryId?: number | null;
-  amount?: number;
-  accountName?: string;
-  accountColor?: string;
-  accountId?: number;
-  date?: string;
-  notes?: string;
-  fee?: number;
-  transferIn?: { id?: number; accountId?: number; accountName?: string; amount?: number };
-  groupedTransfer?: boolean;
-};
 
 function TransactionRowItem({
   tx,
@@ -81,13 +74,13 @@ function TransactionRowItem({
           <div
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
             style={{
-              backgroundColor: (tx.categoryColor || "#3b82f6") + "20",
+              backgroundColor: "#3b82f620",
             }}
           >
             <ArrowRightLeft
               className="h-4 w-4"
               style={{
-                color: tx.categoryColor || "#3b82f6",
+                color: "#3b82f6",
               }}
             />
           </div>
@@ -99,13 +92,25 @@ function TransactionRowItem({
               <Badge
                 className="px-1.5 py-0 text-[10px] leading-5"
                 style={{
-                  backgroundColor: (tx.categoryColor || "#3b82f6") + "20",
-                  color: tx.categoryColor || "#3b82f6",
+                  backgroundColor: "#3b82f620",
+                  color: "#3b82f6",
                   borderColor: "transparent",
                 }}
               >
                 {tx.accountName} → {tx.transferIn?.accountName}
               </Badge>
+              {tx.categoryName && (
+                <Badge
+                  className="px-1.5 py-0 text-[10px] leading-5"
+                  style={{
+                    backgroundColor: (tx.categoryColor || "#10b981") + "20",
+                    color: tx.categoryColor || "#10b981",
+                    borderColor: "transparent",
+                  }}
+                >
+                  {tx.categoryName}
+                </Badge>
+              )}
               {typeof tx.fee === "number" && tx.fee > 0 && (
                 <Badge
                   className="px-1.5 py-0 text-[10px] leading-5"
@@ -140,6 +145,7 @@ function TransactionRowItem({
 
   const isAdjustment =
     tx.type === "adjustment_in" || tx.type === "adjustment_out";
+  const isSplitBill = tx.source === "split_bill";
 
   return (
     <div
@@ -155,12 +161,16 @@ function TransactionRowItem({
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
           style={{
-            backgroundColor: isAdjustment
+            backgroundColor: isSplitBill
+              ? "#f59e0b20"
+              : isAdjustment
               ? "#7a7a7a20"
               : (tx.categoryColor || "#6b7280") + "20",
           }}
         >
-          {isAdjustment ? (
+          {isSplitBill ? (
+            <Users className="h-4 w-4 text-amber-500" />
+          ) : isAdjustment ? (
             <Wrench className="h-4 w-4" style={{ color: "#7a7a7a" }} />
           ) : (
             <span
@@ -178,7 +188,19 @@ function TransactionRowItem({
               (isAdjustment ? "Penyesuaian saldo" : "Transaksi")}
           </p>
           <div className="flex flex-wrap items-center gap-1">
-            {isAdjustment ? (
+            {isSplitBill && (
+              <Badge
+                className="px-1.5 py-0 text-[10px] leading-5"
+                style={{
+                  backgroundColor: "#f59e0b20",
+                  color: "#f59e0b",
+                  borderColor: "transparent",
+                }}
+              >
+                Split Bill
+              </Badge>
+            )}
+            {isAdjustment && !isSplitBill ? (
               <Badge
                 className="px-1.5 py-0 text-[10px] leading-5"
                 style={{
@@ -189,7 +211,7 @@ function TransactionRowItem({
               >
                 Penyesuaian
               </Badge>
-            ) : (
+            ) : !isAdjustment ? (
               <Badge
                 className="px-1.5 py-0 text-[10px] leading-5"
                 style={{
@@ -200,7 +222,7 @@ function TransactionRowItem({
               >
                 {tx.categoryName || "Uncategorized"}
               </Badge>
-            )}
+            ) : null}
             <Badge
               className="px-1.5 py-0 text-[10px] leading-5"
               style={{
@@ -444,6 +466,7 @@ export default function TransactionsPage() {
         queryClient.invalidateQueries({ queryKey: ["balances"] });
         queryClient.invalidateQueries({ queryKey: ["breakdown"] });
         queryClient.invalidateQueries({ queryKey: ["trend"] });
+        queryClient.invalidateQueries({ queryKey: ["dues"] });
       }
     } finally {
       setDeleting(false);
@@ -451,29 +474,18 @@ export default function TransactionsPage() {
   };
 
 
-  // Group transfer pairs and search-filter transactions by date
+  // Group transfer pairs, split bills, split settlements, and search-filter by date
   const searchLower = search.toLowerCase().trim();
-  const groupedRows = groupTransactions(transactions);
-  const grouped: Record<string, any[]> = {};
-  groupedRows.forEach((tx: any) => {
-    if (searchLower) {
-      const desc = (tx.description || "").toLowerCase();
-      const cat = (tx.categoryName || "").toLowerCase();
-      const acc = (tx.accountName || "").toLowerCase();
-      const notes = (tx.notes || "").toLowerCase();
-      const toAcc = (tx.transferIn?.accountName || "").toLowerCase();
-      if (
-        !desc.includes(searchLower) &&
-        !cat.includes(searchLower) &&
-        !acc.includes(searchLower) &&
-        !notes.includes(searchLower) &&
-        !toAcc.includes(searchLower)
-      ) {
-        return;
-      }
+  const displayItems = groupTransactionsWithSplitBill(transactions);
+  const grouped: Record<string, DisplayTransactionItem[]> = {};
+  displayItems.forEach((item) => {
+    if (!matchesDisplayItemSearch(item, searchLower)) {
+      return;
     }
-    if (!grouped[tx.date]) grouped[tx.date] = [];
-    grouped[tx.date].push(tx);
+    const dateKey =
+      item.kind === "regular" ? item.tx.date || "unknown" : item.date || "unknown";
+    if (!grouped[dateKey]) grouped[dateKey] = [];
+    grouped[dateKey].push(item);
   });
 
   return (
@@ -575,7 +587,7 @@ export default function TransactionsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Akun</SelectItem>
-              {accounts.map((a: any) => (
+              {accounts.map((a: { id: number; name: string }) => (
                 <SelectItem key={a.id} value={String(a.id)}>
                   {a.name}
                 </SelectItem>
@@ -630,13 +642,33 @@ export default function TransactionsPage() {
                   {formatDate(date, "long")}
                 </p>
                 <div className="space-y-1">
-                  {(txs as TxRow[]).map((tx: TxRow) => (
-                    <TransactionRowItem
-                      key={tx.id}
-                      tx={tx}
-                      onOpenMenu={(target) => setActionTarget(target)}
-                    />
-                  ))}
+                  {txs.map((item) => {
+                    if (item.kind === "split_bill") {
+                      return (
+                        <SplitBillGroupRow
+                          key={item.groupId}
+                          item={item}
+                          onOpenMenu={(target) => setActionTarget(target)}
+                        />
+                      );
+                    }
+                    if (item.kind === "split_settlement") {
+                      return (
+                        <SplitBillSettlementGroupRow
+                          key={item.groupId}
+                          item={item}
+                          onOpenMenu={(target) => setActionTarget(target)}
+                        />
+                      );
+                    }
+                    return (
+                      <TransactionRowItem
+                        key={item.tx.id}
+                        tx={item.tx}
+                        onOpenMenu={(target) => setActionTarget(target)}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             ))

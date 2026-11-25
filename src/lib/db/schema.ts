@@ -112,12 +112,16 @@ export const transactions = pgTable(
   description: varchar("description", { length: 255 }).default(""),
   notes: text("notes").default(""),
   transferGroupId: uuid("transfer_group_id"),
+  splitGroupId: uuid("split_group_id"),
   fee: integer("fee").notNull().default(0),
   source: varchar("source", { length: 50 }).default("manual"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (table) => [index("transactions_user_id_idx").on(table.userId)]
+  (table) => [
+    index("transactions_user_id_idx").on(table.userId),
+    index("transactions_split_group_id_idx").on(table.splitGroupId),
+  ]
 );
 
 export const budgets = pgTable(
